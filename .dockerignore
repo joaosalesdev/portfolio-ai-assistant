@@ -1,0 +1,12 @@
+# Contexto por allowlist: dados locais e secrets não entram no build.
+**
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+!src/**
+**/__pycache__/
+**/*.pyc
+**/.env*
+**/*.pem
+**/*.key

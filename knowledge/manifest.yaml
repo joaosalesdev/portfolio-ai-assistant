@@ -1,0 +1,59 @@
+# Formato inicial proposto; o loader do manifesto ainda será implementado.
+# Caminhos relativos a knowledge/, restritos a documents/.
+# Só fontes explicitamente aprovadas poderão ser processadas pelo futuro loader.
+# Esta flag NÃO impede publicação no Git: revise o conteúdo antes de adicioná-lo.
+version: 1
+documents:
+  - source_key: example/project
+    title: "Modelo de projeto — preencher antes de aprovar"
+    project: example
+    path: documents/project-template.md
+    approved_for_publication: false
+
+  - source_key: example/profile
+    title: "Modelo de perfil — preencher antes de aprovar"
+    project: professional-profile
+    path: documents/profile-template.md
+    approved_for_publication: false
+
+  - source_key: projects/melita
+    title: "Melita — preencher"
+    project: melita
+    path: documents/melita.md
+    approved_for_publication: false
+
+  - source_key: projects/salesforce
+    title: "Integração Salesforce — preencher"
+    project: salesforce
+    path: documents/salesforce.md
+    approved_for_publication: false
+
+  - source_key: projects/automations
+    title: "Automações — preencher"
+    project: automations
+    path: documents/automations.md
+    approved_for_publication: false
+
+  - source_key: projects/italian-saas
+    title: "SaaS de italiano — preencher"
+    project: italian-saas
+    path: documents/italian-saas.md
+    approved_for_publication: false
+
+  - source_key: portfolio/content
+    title: "Portfólio — preencher"
+    project: portfolio
+    path: documents/portfolio.md
+    approved_for_publication: false
+
+  - source_key: example/github-readme
+    title: "README público — preencher"
+    project: example
+    path: documents/github-readme.md
+    approved_for_publication: false
+
+  - source_key: projects/portfolio-ai-assistant
+    title: "Portfolio AI Assistant — revisar"
+    project: portfolio-ai-assistant
+    path: documents/portfolio-ai-assistant.md
+    approved_for_publication: false
