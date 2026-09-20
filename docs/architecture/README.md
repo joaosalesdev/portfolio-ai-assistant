@@ -3,8 +3,11 @@
 Status: estrutura de arquivos; pipelines ainda não implementados.
 
 - `src/`: lógica RAG organizada por responsabilidade.
-- `infrastructure/indexing/`: entrada e imagem da Lambda administrativa.
-- `infrastructure/retrieval/`: entrada e imagem da Lambda de consulta via Function URL.
+- `src/interfaces/events/s3_handler.py`: entrada S3 da Lambda de indexação.
+- `src/interfaces/http/lambda_handler.py`: entrada HTTP de consulta via Function URL.
+- `docker/indexing.Dockerfile` e `docker/retrieval.Dockerfile`: imagens das Lambdas.
+- `tests/events/indexing/` e `tests/events/retrieval/`: payloads fictícios de exemplo.
+- `tests/unit/`: pastas que espelham os módulos de processamento.
 - `terraform/`: recursos AWS declarados como infraestrutura como código.
 
 O handler de consulta orquestrará embeddings, retrieval e geração. O handler de
@@ -17,5 +20,7 @@ um framework de agentes. `persistence/vector_repository.py` concentrará SQL qua
 houver banco. Os arquivos atuais são pontos de implementação, não integrações prontas.
 
 Cada Dockerfile usará a raiz do repositório como contexto de build. A imagem deverá
-copiar `src/` para um diretório importável e somente o handler da respectiva Lambda.
-A origem dos documentos e o mecanismo de aprovação ainda precisam ser implementados.
+copiar o conteúdo de `src/` para um diretório importável. As entradas serão
+`interfaces.events.s3_handler.handler` e `interfaces.http.lambda_handler.handler`.
+Os documentos serão referenciados por eventos S3; leitura, aprovação de fontes e
+validações ainda precisam ser implementadas. Os exemplos não disparam chamadas AWS.

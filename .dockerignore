@@ -1,13 +1,8 @@
 **
 !src/
 !src/**
-!infrastructure/
-!infrastructure/indexing/
-!infrastructure/indexing/handler.py
-!infrastructure/indexing/Dockerfile
-!infrastructure/retrieval/
-!infrastructure/retrieval/handler.py
-!infrastructure/retrieval/Dockerfile
+!docker/
+!docker/*.Dockerfile
 !requirements.txt
 **/__pycache__/
 **/*.pyc

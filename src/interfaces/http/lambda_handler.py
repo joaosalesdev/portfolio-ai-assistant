@@ -1,4 +1,4 @@
-"""Entrada reservada da Lambda portfolio-ai-assistant-retrieval."""
+"""Entrada HTTP da Lambda portfolio-ai-assistant-retrieval; implementação pendente."""
 
 
 def handler(event, context):

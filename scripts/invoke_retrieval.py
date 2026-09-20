@@ -1,4 +1,4 @@
-"""Invocação administrativa/local de retrieval; implementação pendente."""
+"""Futura invocação de interfaces.http.lambda_handler com tests/events/retrieval/*.json."""
 
 
 if __name__ == "__main__":

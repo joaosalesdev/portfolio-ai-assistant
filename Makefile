@@ -7,7 +7,7 @@ help:
 	@echo "test: executar pytest (a nova estrutura ainda não contém testes)"
 
 install-dev:
-	$(PYTHON) -m pip install -r requirements-dev.txt
+	$(PYTHON) -m pip install -r requirements.txt 'pytest>=8.3,<10'
 
 test:
 	$(PYTHON) -m pytest

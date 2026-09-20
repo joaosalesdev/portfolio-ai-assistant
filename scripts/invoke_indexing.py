@@ -1,4 +1,4 @@
-"""Invocação administrativa/local de indexing; implementação pendente."""
+"""Futura invocação de interfaces.events.s3_handler com tests/events/indexing/*.json."""
 
 
 if __name__ == "__main__":

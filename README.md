@@ -3,15 +3,22 @@
 RAG para consultar experiência profissional e projetos a partir de fontes públicas
 selecionadas, com respostas fundamentadas e indicação das fontes.
 
-**Status: recomeço da estrutura.** Os arquivos definem responsabilidades e pontos
-de implementação. Ainda não há pipeline RAG, testes de comportamento nesta nova
-estrutura, imagem Docker buildável ou recursos AWS implantados.
+**Status: estrutura inicial.** Os pipelines, testes de comportamento, imagens Docker
+e recursos AWS ainda não estão implementados. Não há deploy ou métricas de produção.
 
 ## Estrutura
 
 ```text
 portfolio-ai-assistant/
 ├── src/
+│   ├── interfaces/
+│   │   ├── __init__.py
+│   │   ├── http/
+│   │   │   ├── __init__.py
+│   │   │   └── lambda_handler.py
+│   │   └── events/
+│   │       ├── __init__.py
+│   │       └── s3_handler.py
 │   ├── ingestion/
 │   │   ├── __init__.py
 │   │   ├── loader.py
@@ -28,15 +35,24 @@ portfolio-ai-assistant/
 │   └── persistence/
 │       ├── __init__.py
 │       └── vector_repository.py
-├── infrastructure/
-│   ├── indexing/
-│   │   ├── handler.py
-│   │   ├── Dockerfile
-│   │   └── requests/event.json
-│   └── retrieval/
-│       ├── handler.py
-│       ├── Dockerfile
-│       └── requests/request.json
+├── tests/
+│   ├── unit/
+│   │   ├── ingestion/
+│   │   ├── embeddings/
+│   │   ├── retrieval/
+│   │   ├── generation/
+│   │   └── persistence/
+│   └── events/
+│       ├── indexing/
+│       │   └── s3_object_created.json
+│       └── retrieval/
+│           └── post_question.json
+├── scripts/
+│   ├── invoke_indexing.py
+│   └── invoke_retrieval.py
+├── docker/
+│   ├── indexing.Dockerfile
+│   └── retrieval.Dockerfile
 ├── terraform/
 │   ├── versions.tf
 │   ├── providers.tf
@@ -49,10 +65,6 @@ portfolio-ai-assistant/
 │   ├── iam.tf
 │   ├── events.tf
 │   └── terraform.tfvars.example
-├── tests/unit/
-├── scripts/
-│   ├── invoke_indexing.py
-│   └── invoke_retrieval.py
 ├── docs/
 │   ├── architecture/
 │   └── diagrams/
@@ -60,84 +72,91 @@ portfolio-ai-assistant/
 ├── .gitignore
 ├── .dockerignore
 ├── requirements.txt
-├── requirements-dev.txt
 ├── pytest.ini
 ├── Makefile
 └── README.md
 ```
 
+Pastas de testes ainda vazias possuem `.gitkeep` para serem preservadas no Git.
+
 ## Responsabilidades
 
-| Pasta | Finalidade |
+| Pasta | Responsabilidade |
 | --- | --- |
+| `src/interfaces/` | Traduzir eventos HTTP e S3 para os serviços |
 | `src/ingestion/` | Leitura de fontes aprovadas e chunking |
 | `src/embeddings/` | Embeddings de documentos e perguntas |
-| `src/retrieval/` | Recuperação, filtros e seleção de contexto |
-| `src/generation/` | Geração com evidências e citações |
-| `src/persistence/` | SQL e armazenamento em PostgreSQL + pgvector |
-| `infrastructure/` | Entradas e empacotamento das duas Lambdas |
-| `terraform/` | Definição dos recursos AWS |
-| `tests/unit/` | Testes sem rede ou chamadas pagas, adicionados com a implementação |
-| `scripts/` | Ferramentas de invocação, ainda não implementadas |
+| `src/retrieval/` | Busca, filtros e seleção de contexto |
+| `src/generation/` | Respostas fundamentadas e citações |
+| `src/persistence/` | Operações PostgreSQL + pgvector |
+| `tests/unit/` | Testes de cada módulo sem serviços externos |
+| `tests/events/` | Dados fictícios para testes e invocação local |
+| `scripts/` | Ferramentas de invocação |
+| `docker/` | Empacotamento das duas Lambdas |
+| `terraform/` | Recursos AWS definidos como código |
 | `docs/` | Arquitetura e diagramas |
 
-Módulos simples por responsabilidade, sem a pasta intermediária `portfolio_ai/`.
-Quando houver clientes externos, eles serão recebidos explicitamente pelas funções
-ou serviços para permitir testes independentes da infraestrutura.
+Módulos simples por responsabilidade. Os handlers serão finos; clientes externos
+serão recebidos explicitamente pelos serviços quando necessário para permitir
+testes sem AWS ou chamadas pagas. Não há framework de agentes ou camadas adicionais.
 
-As funções planejadas são **portfolio-ai-assistant-indexing** e
-**portfolio-ai-assistant-retrieval**. A primeira será administrativa; a segunda
-receberá perguntas pela Function URL e coordenará retrieval e geração.
+## Lambdas e eventos
 
-## Exemplos e limites atuais
+| Lambda | Entrada Python | Exemplo |
+| --- | --- | --- |
+| `portfolio-ai-assistant-indexing` | `interfaces.events.s3_handler.handler` | `tests/events/indexing/s3_object_created.json` |
+| `portfolio-ai-assistant-retrieval` | `interfaces.http.lambda_handler.handler` | `tests/events/retrieval/post_question.json` |
 
-- Handlers levantam `NotImplementedError`; não executam indexação nem consulta.
-- Dockerfiles contêm orientações; ainda não podem gerar imagens.
-- Scripts encerram informando que a invocação não foi implementada.
-- Eventos JSON são propostas de contrato, sem recursos reais. `dry_run` ainda não
-  é uma funcionalidade implementada. O exemplo de consulta representa um evento
-  HTTP da Function URL; o corpo enviado pelo navegador será apenas a pergunta.
-- Terraform contém nomes/variáveis e placeholders; ainda não provisiona recursos.
-- S3 e acionamento por eventos dependem de decisão posterior; não são obrigatórios
-  para iniciar o pipeline.
+A indexação receberá notificações S3 e não terá URL pública. A consulta usará
+Function URL e coordenará embedding da pergunta, retrieval e geração.
+
+O evento S3 referencia um Markdown fictício. O prefixo `approved/` no exemplo
+não implementa aprovação de documentos. O evento HTTP contém o envelope entregue
+pela Lambda; o navegador enviará apenas o JSON da pergunta presente em `body`.
+
+Os exemplos não chamam AWS nem comprovam que os pipelines funcionam.
+Os handlers levantam `NotImplementedError` e os scripts encerram informando que
+a invocação está pendente.
 
 ## Desenvolvimento
-
-Criar um ambiente virtual antes de instalar as dependências:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+make install-dev
 ```
 
-O pytest está configurado para importar os módulos de `src/`. Os testes serão
-adicionados com o primeiro comportamento real. Até lá, `make test` ou
-`python -m pytest` reportará ausência de testes (código de saída 5).
-As dependências de runtime serão escolhidas durante a implementação.
+O alvo instala `requirements.txt` e pytest na venv ativa. Dependências de runtime
+serão adicionadas conforme cada integração for implementada.
 
-Cada Dockerfile usará a raiz do repositório como contexto de build. A imagem deverá
-expor os módulos de `src/` no caminho de imports e copiar o handler correspondente.
-O empacotamento será validado antes do deploy.
+`pytest.ini` configura imports de `src/`. Quando houver testes, executar
+`make test` ou `python -m pytest`. Atualmente não há testes coletáveis:
+o pytest retornará código 5. Os eventos JSON são fixtures, não testes executáveis.
+
+## Docker e Terraform
+
+Os Dockerfiles ainda contêm apenas orientações e não são buildáveis. Usarão a
+raiz do repositório como contexto e copiarão o conteúdo de `src/` para um
+diretório importável. As entradas estão indicadas na tabela das Lambdas.
+
+Terraform contém variáveis, nomes e arquivos reservados para implementação.
+Ainda não há configuração capaz de provisionar as Lambdas.
 
 ## Configuração e segurança
 
-`.env.example` possui apenas campos de exemplo; não há carregamento automático
-de `.env` nesta estrutura. Não incluir credenciais nos arquivos Python, Terraform,
-imagens ou eventos de exemplo. Autenticação AWS será configurada externamente.
+`.env.example` contém campos vazios ou nomes de exemplo, sem credenciais.
+O carregamento de `.env` ainda não foi implementado; autenticação AWS será externa.
 
-Versionar `terraform/*.tf` e, quando gerado, `.terraform.lock.hcl`.
-Não versionar `.env`, credenciais, estado Terraform, planos salvos ou arquivos
-locais `.tfvars`. As regras estão no `.gitignore`; o `.dockerignore` restringe
-o contexto de build. Isso não substitui a revisão do conteúdo antes do commit.
+Versionar os arquivos Terraform e, quando gerado, `.terraform.lock.hcl`.
+O `.gitignore` exclui secrets locais, estado, planos e valores locais de Terraform.
+O `.dockerignore` permite somente código, Dockerfiles e dependências no contexto.
+Testes e payloads de exemplo ficam fora das imagens.
 
 ## Próximos passos
 
-1. Definir versões do Terraform/provider, região e autenticação AWS.
+1. Configurar versões do Terraform/provider AWS, região e autenticação.
 2. Implementar ECR.
 3. Implementar e testar o handler mínimo de indexação e sua imagem.
-4. Publicar a imagem e implementar IAM, logs e Lambda via Terraform.
-5. Implementar leitura, chunking, embeddings e persistência progressivamente.
-6. Implementar consulta e avaliação das respostas com fontes.
-
-Não há métricas ou experiência de operação em produção registradas.
+4. Implementar IAM, logs, Lambda e acionamento S3 com validação das fontes.
+5. Construir leitura, chunking, embeddings e persistência por etapas.
+6. Implementar consulta e avaliar retrieval e respostas com fontes.

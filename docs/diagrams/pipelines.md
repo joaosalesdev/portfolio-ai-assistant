@@ -4,7 +4,7 @@ Os diagramas descrevem o objetivo, não funcionalidades já disponíveis.
 
 ```mermaid
 flowchart LR
-    A[Invocação administrativa] --> B[Lambda indexing]
+    A[Evento S3 ObjectCreated] --> B[Lambda indexing]
     B --> C[Loader e chunker]
     C --> D[Embeddings]
     D --> E[PostgreSQL + pgvector]
