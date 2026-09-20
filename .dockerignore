@@ -1,10 +1,14 @@
-# Contexto por allowlist: dados locais e secrets não entram no build.
 **
-!pyproject.toml
-!README.md
-!LICENSE
 !src/
 !src/**
+!infrastructure/
+!infrastructure/indexing/
+!infrastructure/indexing/handler.py
+!infrastructure/indexing/Dockerfile
+!infrastructure/retrieval/
+!infrastructure/retrieval/handler.py
+!infrastructure/retrieval/Dockerfile
+!requirements.txt
 **/__pycache__/
 **/*.pyc
 **/.env*

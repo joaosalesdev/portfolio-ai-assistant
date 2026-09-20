@@ -229,6 +229,9 @@ credentials/
 *.pfx
 *.tfstate
 *.tfstate.*
+*.tfplan
+tfplan
+crash.log
 *.tfvars
 *.tfvars.json
 .terraform/

@@ -1,0 +1,20 @@
+{
+  "version": "2.0",
+  "routeKey": "$default",
+  "rawPath": "/chat",
+  "rawQueryString": "",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/chat",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "local-example"
+    }
+  },
+  "body": "{\"question\":\"Qual experiência com AWS está documentada?\"}",
+  "isBase64Encoded": false
+}
