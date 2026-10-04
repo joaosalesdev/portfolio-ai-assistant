@@ -7,7 +7,13 @@ terraform {
       source  = "hashicorp/aws"
       version = "6.67.0"
     }
+
+    archive = {
+      source  = "hashicorp/archive"
+      version = "2.8.1"
+    }
   }
+
 
   backend "s3" {
     bucket       = "joaosalesdev-terraform-state"
@@ -15,8 +21,6 @@ terraform {
     region       = "us-east-1"
     use_lockfile = true
   }
-
-
 }
 
 # Configure the AWS Provider
