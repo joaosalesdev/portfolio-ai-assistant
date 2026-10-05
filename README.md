@@ -6,8 +6,10 @@ documentos públicos selecionados, apresentar fontes e reconhecer quando não ho
 evidência suficiente.
 
 **Em desenvolvimento.** O repositório contém handlers mínimos e definições Terraform
-para duas Lambdas com empacotamento ZIP. O pipeline RAG e a migração para imagens
-Docker ainda não foram implementados. Esta documentação descreve o código e a
+para duas Lambdas ainda configuradas com empacotamento ZIP. Os Dockerfiles estão
+implementados; o build e a invocação local dos handlers foram validados.
+O pipeline RAG, a migração das Lambdas para imagens e o workflow de deploy
+ainda estão pendentes. Esta documentação descreve o código e a
 arquitetura planejada; não comprova deploy ou operação em produção.
 
 ## Problema e objetivo
@@ -29,9 +31,9 @@ experiência profissional nem executar ações externas em nome do visitante.
 
 ## Arquitetura alvo
 
-![Arquitetura alvo do Portfolio AI Assistant: indexação de documentos via S3 e Lambda, consulta pelo portfólio e PostgreSQL com pgvector](docs/diagrams/portfolio-ai-assistant-architecture.png)
+![Arquitetura alvo do Portfolio AI Assistant: indexação de documentos via S3 e Lambda, consulta pelo portfólio e PostgreSQL com pgvector](docs/diagrams/01-high-level-architecture.png)
 
-[Abrir o diagrama em tamanho original](docs/diagrams/portfolio-ai-assistant-architecture.png).
+[Abrir o diagrama em tamanho original](docs/diagrams/01-high-level-architecture.png).
 
 O diagrama representa os dois fluxos principais planejados. As chamadas às APIs de
 embeddings e geração, a Function URL, o ECR e os componentes de operação estão
@@ -85,13 +87,16 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 
 | Componente | Situação no código |
 | --- | --- |
-| Terraform | Providers AWS/archive, backend S3 e região configurados |
+| Terraform | Separado em base/app, com estados distintos no backend S3 |
 | Lambdas | Duas funções definidas com runtime Python 3.14 e pacote ZIP |
 | IAM | Roles separadas com política de confiança para Lambda; permissões operacionais pendentes |
 | Handlers utilizados pelo Terraform | Retornam mensagem fixa; não executam RAG |
 | Entrada S3 | Arquivo reservado, ainda levanta `NotImplementedError` |
-| Dockerfiles | Orientações de implementação; ainda não são buildáveis |
-| ECR, S3 de documentos e notificação | Arquivos reservados, sem recursos implementados |
+| Dockerfiles | Imagens Python 3.14 com handlers mínimos; build e invocação validados localmente |
+| ECR | Dois repositórios definidos em base; criação na AWS confirmada |
+| GitHub/AWS | OIDC existente consultado; role e permissões de publicação criadas; permissões de deploy e políticas ECR definidas em base |
+| GitHub Actions | Workflow ainda não implementado |
+| S3 de documentos e notificação | Arquivos reservados, sem recursos implementados |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
 | Testes | Configuração pytest e exemplos de eventos; sem testes coletáveis |
@@ -120,8 +125,10 @@ portfolio-ai-assistant/
 │   └── events/            # Exemplos S3 e HTTP
 ├── scripts/               # Invocação das funções
 ├── docker/                # Dockerfiles de indexação e consulta
-├── terraform/             # Recursos e configuração AWS
-├── docs/diagrams/         # Diagrama de arquitetura
+├── terraform/
+│   ├── base/              # ECR, OIDC e permissões do GitHub Actions
+│   └── app/               # Lambdas e recursos da aplicação
+├── docs/diagrams/         # Arquitetura e fluxo de deploy
 ├── requirements.txt
 ├── pytest.ini
 ├── Makefile
@@ -165,13 +172,36 @@ requisição HTTP real, o cliente enviará apenas o JSON da pergunta presente em
 
 ## Terraform e deploy
 
-A configuração atual em `terraform/providers.tf` referencia um backend S3
-específico do projeto. Para utilizá-la em outra conta, revisar backend, região,
+As configurações em `terraform/base/providers.tf` e
+`terraform/app/providers.tf` referenciam o mesmo bucket S3 de estado, com chaves
+distintas. Para utilizá-las em outra conta, revisar backend, região,
 credenciais externas e nomes antes de inicializar.
 
-O Terraform atual cria pacotes ZIP dos handlers mínimos. Esses pacotes ainda não
-incluem um pipeline RAG. A publicação de imagens no ECR, a configuração das Lambdas
-para usá-las e os procedimentos de deploy/rollback serão implementados depois.
+### Deployment Workflow
+
+![Fluxo de deploy: Terraform base prepara ECR e acesso à AWS; GitHub Actions publica imagens e executa Terraform app para criar ou atualizar Lambdas](docs/diagrams/02-deployment-workflow.png)
+
+[Abrir o fluxo de deploy em tamanho original](docs/diagrams/02-deployment-workflow.png).
+
+O diagrama representa o fluxo planejado:
+
+1. Terraform `base`, executado inicialmente na máquina local, cria o ECR e
+   configura o acesso do GitHub à AWS via OIDC. O provider OIDC existente é
+   reutilizado. A base volta a ser aplicada quando seus recursos mudam.
+2. Um push na branch `main` dispara o GitHub Actions, que deverá executar os
+   testes, construir as duas imagens Docker e publicá-las no ECR.
+3. No mesmo pipeline, o Actions passa as URIs com os digests das imagens ao
+   Terraform `app`, executa o plan e, após aprovação, aplica o plano.
+4. Terraform `app` cria ou atualiza as Lambdas com as imagens publicadas e
+   gerencia suas roles IAM e grupos de logs.
+
+O digest identifica o conteúdo de uma imagem, permitindo selecionar sua versão
+exata. Publicar uma imagem no ECR, sozinho, não atualiza a Lambda.
+GitHub Actions coordena o deploy; Terraform gerencia a configuração das funções.
+
+Atualmente, `app` ainda empacota os handlers mínimos em ZIP.
+A publicação no ECR, a migração das Lambdas para imagens, o workflow,
+a aprovação e os procedimentos de rollback ainda serão implementados.
 
 Nenhum comando de aplicação de infraestrutura foi executado para esta revisão
 do README. A existência de recursos definidos no código não confirma seu estado
@@ -196,8 +226,9 @@ antes de publicá-los.
 
 ## Avaliação e próximos passos
 
-1. Validar a infraestrutura mínima e completar permissões de logs.
-2. Implementar ECR e imagens Docker; alinhar os handlers e o Terraform.
+1. Migrar Terraform app para imagens por digest e configurar permissões de logs.
+2. Validar as permissões de deploy da base e implementar o GitHub Actions para
+   testes, build, publicação, plan, aprovação e apply.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
 4. Implementar leitura, chunking, embeddings e persistência com testes.
 5. Conectar a indexação ao S3 e validar atualização/exclusão de documentos.
