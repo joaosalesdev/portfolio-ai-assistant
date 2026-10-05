@@ -1,5 +1,11 @@
-# Modelo reservado para portfolio-ai-assistant-indexing; ainda não é buildável.
-# Implementar após escolher o runtime Python da Lambda e validar dependências.
-# Contexto de build: raiz do repositório.
-# Copiar requirements.txt e o conteúdo de src/ para o diretório importável da imagem.
-# Entrada prevista: interfaces.events.s3_handler.handler.
+FROM public.ecr.aws/lambda/python:3.14
+
+COPY requirements.txt ${LAMBDA_TASK_ROOT}/requirements.txt
+
+RUN pip install --no-cache-dir \
+    -r ${LAMBDA_TASK_ROOT}/requirements.txt \
+    --target ${LAMBDA_TASK_ROOT}
+
+COPY src/ ${LAMBDA_TASK_ROOT}/
+
+CMD ["interfaces.http.indexing.lambda_function.lambda_handler"]
