@@ -17,7 +17,7 @@ terraform {
 
   backend "s3" {
     bucket       = "joaosalesdev-terraform-state"
-    key          = "portfolio-ai/dev/terraform.tfstate"
+    key          = "portfolio-ai-assistant/dev/app/terraform.tfstate"
     region       = "us-east-1"
     use_lockfile = true
   }

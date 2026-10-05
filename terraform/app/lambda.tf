@@ -5,7 +5,7 @@
 # Package Indexing Lambda
 data "archive_file" "indexing" {
   type        = "zip"
-  source_dir  = "${path.module}/../src/interfaces/http/indexing"
+  source_dir  = "${path.module}/../../src/interfaces/http/indexing"
   output_path = "${path.module}/.build/indexing.zip"
 }
 
@@ -27,7 +27,7 @@ resource "aws_lambda_function" "indexing" {
 # Package Retrieval Lambda
 data "archive_file" "retrieval" {
   type        = "zip"
-  source_dir  = "${path.module}/../src/interfaces/http/retrieval"
+  source_dir  = "${path.module}/../../src/interfaces/http/retrieval"
   output_path = "${path.module}/.build/retrieval.zip"
 }
 
