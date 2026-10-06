@@ -1,0 +1,151 @@
+name: Deploy Lambda containers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "docker/**"
+      - "requirements.txt"
+      - "terraform/app/**"
+      - "scripts/smoke_containers.py"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lambda-deploy-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::338034595477:role/portfolio-ai-assistant-github-actions
+  ECR_REGISTRY: 338034595477.dkr.ecr.us-east-1.amazonaws.com
+  PROJECT_NAME: portfolio-ai-assistant
+  TF_VERSION: "1.16.4"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Validate Terraform
+        run: |
+          terraform -chdir=terraform/app fmt -check
+          terraform -chdir=terraform/app init -backend=false
+          terraform -chdir=terraform/app validate
+          terraform -chdir=terraform/app test -no-color
+      - name: Build images
+        run: |
+          IMAGE_TAG="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          for component in indexing retrieval; do
+            docker buildx build --platform linux/amd64 --provenance=false --load \
+              -f "docker/$component.Dockerfile" \
+              -t "$ECR_REGISTRY/$PROJECT_NAME-$component:$IMAGE_TAG" .
+          done
+      - name: Invoke handlers inside containers
+        run: |
+          trap 'docker rm -f indexing-ci retrieval-ci >/dev/null 2>&1 || true' EXIT
+          docker run -d --name indexing-ci -p 127.0.0.1:9000:8080 \
+            "$ECR_REGISTRY/$PROJECT_NAME-indexing:$IMAGE_TAG"
+          docker run -d --name retrieval-ci -p 127.0.0.1:9001:8080 \
+            "$ECR_REGISTRY/$PROJECT_NAME-retrieval:$IMAGE_TAG"
+          if ! python3 scripts/smoke_containers.py; then
+            docker logs indexing-ci
+            docker logs retrieval-ci
+            exit 1
+          fi
+      - name: Authenticate to AWS with OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "338034595477"
+      - name: Publish images and resolve digests
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" |
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          for component in indexing retrieval; do
+            repository="$PROJECT_NAME-$component"
+            docker push "$ECR_REGISTRY/$repository:$IMAGE_TAG"
+            digest=$(aws ecr describe-images --repository-name "$repository" \
+              --image-ids "imageTag=$IMAGE_TAG" \
+              --query 'imageDetails[0].imageDigest' --output text)
+            if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "Invalid digest for $component" >&2
+              exit 1
+            fi
+            echo "TF_VAR_${component}_image_uri=$ECR_REGISTRY/$repository@$digest" >> "$GITHUB_ENV"
+          done
+      - name: Create deployment plan
+        run: |
+          terraform -chdir=terraform/app init -reconfigure
+          terraform -chdir=terraform/app plan -lock-timeout=5m -out=deploy.tfplan
+          terraform -chdir=terraform/app show -no-color deploy.tfplan > terraform/app/deploy-plan.txt
+          {
+            echo '### Terraform app — dev'
+            echo 'Review this plan before approving the apply job.'
+            echo '~~~text'
+            cat terraform/app/deploy-plan.txt
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Save approved-plan candidate and provider lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            terraform/app/deploy.tfplan
+            terraform/app/deploy-plan.txt
+            terraform/app/.terraform.lock.hcl
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  apply:
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Configure required reviewers and allow only main in this GitHub environment.
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: terraform/app
+      - name: Authenticate to AWS with OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "338034595477"
+      - name: Apply the saved plan
+        run: |
+          terraform -chdir=terraform/app init -reconfigure -lockfile=readonly
+          terraform -chdir=terraform/app apply -lock-timeout=5m deploy.tfplan

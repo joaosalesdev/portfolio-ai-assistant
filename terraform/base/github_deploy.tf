@@ -92,7 +92,9 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "logs:PutRetentionPolicy", "logs:DeleteRetentionPolicy",
           "logs:ListTagsForResource", "logs:TagResource", "logs:UntagResource"
         ]
-        Resource = local.app_log_arns
+        Resource = concat(local.app_log_arns, [
+          for arn in local.app_log_arns : trimsuffix(arn, ":*")
+        ])
       },
       {
         Sid      = "DescribeLogGroups"

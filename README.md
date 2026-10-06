@@ -6,10 +6,11 @@ documentos públicos selecionados, apresentar fontes e reconhecer quando não ho
 evidência suficiente.
 
 **Em desenvolvimento.** O repositório contém handlers mínimos e definições Terraform
-para duas Lambdas ainda configuradas com empacotamento ZIP. Os Dockerfiles estão
+para duas Lambdas configuradas com imagens Docker por digest. Os Dockerfiles estão
 implementados; o build e a invocação local dos handlers foram validados.
-O pipeline RAG, a migração das Lambdas para imagens e o workflow de deploy
-ainda estão pendentes. Esta documentação descreve o código e a
+O pipeline RAG está pendente. Terraform app foi adaptado para imagens por digest
+e o workflow de deploy foi implementado, mas sua execução na AWS ainda não foi validada.
+Esta documentação descreve o código e a
 arquitetura planejada; não comprova deploy ou operação em produção.
 
 ## Problema e objetivo
@@ -88,18 +89,19 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | Componente | Situação no código |
 | --- | --- |
 | Terraform | Separado em base/app, com estados distintos no backend S3 |
-| Lambdas | Duas funções definidas com runtime Python 3.14 e pacote ZIP |
-| IAM | Roles separadas com política de confiança para Lambda; permissões operacionais pendentes |
+| Lambdas | Duas funções definidas com imagens Docker por digest e arquitetura x86_64 |
+| IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
+| CloudWatch | Dois grupos de logs com retenção de 30 dias |
 | Handlers utilizados pelo Terraform | Retornam mensagem fixa; não executam RAG |
 | Entrada S3 | Arquivo reservado, ainda levanta `NotImplementedError` |
 | Dockerfiles | Imagens Python 3.14 com handlers mínimos; build e invocação validados localmente |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
 | GitHub/AWS | OIDC existente consultado; role e permissões de publicação criadas; permissões de deploy e políticas ECR definidas em base |
-| GitHub Actions | Workflow ainda não implementado |
+| GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply; configuração de aprovação no environment dev e execução AWS pendentes |
 | S3 de documentos e notificação | Arquivos reservados, sem recursos implementados |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
-| Testes | Configuração pytest e exemplos de eventos; sem testes coletáveis |
+| Testes | Três testes Terraform com AWS simulado e teste de invocação dos containers; pytest ainda sem testes coletáveis |
 | Scripts de invocação | Ainda não implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -139,7 +141,7 @@ A organização separa interfaces de entrada, processamento e persistência. Os
 handlers deverão traduzir eventos e chamar serviços; clientes externos serão
 injetados quando necessário para permitir testes sem AWS ou chamadas pagas.
 
-Atualmente, o Terraform empacota as entradas de `interfaces/http/indexing/` e
+Atualmente, as imagens usam as entradas de `interfaces/http/indexing/` e
 `interfaces/http/retrieval/`. O nome da pasta não cria um endpoint HTTP. A futura
 indexação por S3 deverá ser conectada a `interfaces/events/s3_handler.py`, e as
 entradas configuradas nas imagens serão alinhadas durante a migração para Docker.
@@ -199,9 +201,13 @@ O digest identifica o conteúdo de uma imagem, permitindo selecionar sua versão
 exata. Publicar uma imagem no ECR, sozinho, não atualiza a Lambda.
 GitHub Actions coordena o deploy; Terraform gerencia a configuração das funções.
 
-Atualmente, `app` ainda empacota os handlers mínimos em ZIP.
-A publicação no ECR, a migração das Lambdas para imagens, o workflow,
-a aprovação e os procedimentos de rollback ainda serão implementados.
+Terraform `app` recebe imagens por digest. O workflow está implementado em
+`.github/workflows/deploy.yml` e utiliza o ambiente dev. A aprovação depende da
+configuração de required reviewers no GitHub; a declaração do environment no
+YAML, sozinha, não exige aprovação.
+
+Veja [como preparar e executar o deploy](docs/deployment.md).
+A execução completa na AWS e os procedimentos de rollback ainda estão pendentes.
 
 Nenhum comando de aplicação de infraestrutura foi executado para esta revisão
 do README. A existência de recursos definidos no código não confirma seu estado
@@ -226,9 +232,8 @@ antes de publicá-los.
 
 ## Avaliação e próximos passos
 
-1. Migrar Terraform app para imagens por digest e configurar permissões de logs.
-2. Validar as permissões de deploy da base e implementar o GitHub Actions para
-   testes, build, publicação, plan, aprovação e apply.
+1. Aplicar as permissões atualizadas da base e configurar a aprovação no environment dev.
+2. Executar e validar o workflow completo de publicação e deploy das Lambdas.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
 4. Implementar leitura, chunking, embeddings e persistência com testes.
 5. Conectar a indexação ao S3 e validar atualização/exclusão de documentos.

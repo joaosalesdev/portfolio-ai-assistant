@@ -17,7 +17,10 @@ resource "aws_iam_role" "github_actions" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:joaosalesdev/portfolio-ai-assistant:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub" = [
+            "repo:joaosalesdev/portfolio-ai-assistant:ref:refs/heads/main",
+            "repo:joaosalesdev/portfolio-ai-assistant:environment:dev"
+          ]
         }
       }
     }]
@@ -50,7 +53,8 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
           "ecr:PutImage",
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer",
-          "ecr:DescribeImages"
+          "ecr:DescribeImages",
+          "ecr:GetRepositoryPolicy"
         ]
         Resource = [
           aws_ecr_repository.indexing.arn,

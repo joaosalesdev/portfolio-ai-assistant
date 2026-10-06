@@ -9,3 +9,13 @@ variable "aws_region" {
   type        = string
   default     = "us-east-1"
 }
+
+variable "indexing_image_uri" {
+  description = "URI da imagem de indexing com digest."
+  type        = string
+}
+
+variable "retrieval_image_uri" {
+  description = "URI da imagem de retrieval com digest."
+  type        = string
+}
