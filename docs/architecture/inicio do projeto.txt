@@ -1,0 +1,28 @@
+🚀 Estou construindo um RAG para o meu próprio portfólio.
+A ideia surgiu de uma pergunta simples:
+E se um recrutador ou profissional de tecnologia pudesse conversar com o meu portfólio, em vez de apenas navegar por ele?
+Foi assim que comecei o Portfolio AI Assistant, um projeto em Python que utilizará RAG (Retrieval-Augmented Generation) para responder perguntas sobre minha experiência, competências, projetos e decisões técnicas.
+A ideia é permitir perguntas como:
+“Qual é a sua experiência prática com IA e LLMs?”
+“Quais decisões arquiteturais você já tomou em projetos reais?”
+“Como você decide entre diferentes arquiteturas e serviços cloud para resolver um problema?”
+Em vez de depender apenas do conhecimento do modelo, o assistente recuperará informações da minha própria base de conhecimento, selecionará o contexto relevante e o utilizará para gerar respostas fundamentadas — incluindo as fontes utilizadas.
+Mas o objetivo do projeto vai além de construir um chatbot ou simplesmente implementar RAG.
+Quero construir uma solução backend/cloud funcional e publicamente verificável, reunindo diferentes áreas da engenharia que fazem parte do meu trabalho e da direção em que quero continuar evoluindo: Backend Engineering, Cloud Architecture, Event-Driven Architecture, Infrastructure as Code e AI Engineering.
+Por isso, algumas decisões começaram antes mesmo da implementação do RAG.
+No fluxo de indexação, por exemplo, os documentos são armazenados no Amazon S3 e novos objetos podem iniciar automaticamente o processamento, permitindo que a base de conhecimento seja atualizada através de uma arquitetura orientada a eventos.
+A aplicação também separa indexing e retrieval em fluxos independentes, utiliza funções containerizadas e possui infraestrutura gerenciada com Terraform, enquanto o GitHub Actions automatiza build, testes e deployment na AWS.
+Também separei o Terraform em duas responsabilidades:
+Terraform Base → prepara recursos fundamentais, como os repositórios ECR e o acesso do GitHub à AWS.
+Terraform App → gerencia a infraestrutura da aplicação e cria ou atualiza as funções Lambda utilizando as imagens Docker publicadas pelo pipeline.
+A autenticação entre GitHub Actions e AWS utiliza OIDC, evitando a necessidade de manter credenciais AWS permanentes no pipeline.
+O RAG entra como parte dessa arquitetura: chunking, embeddings, armazenamento vetorial com PostgreSQL + pgvector, recuperação semântica e geração de respostas fundamentadas nas fontes.
+Meu objetivo é transformar o projeto em uma evidência técnica concreta e atualizada do meu trabalho: não apenas mostrar quais tecnologias conheço, mas permitir que outros profissionais vejam a arquitetura, o código e as decisões de engenharia que tomei para construir a solução.
+E existe uma característica que gosto bastante nesse projeto:
+ele próprio passa a fazer parte do meu portfólio enquanto, ao mesmo tempo, torna o portfólio mais útil.
+Quando estiver integrado, quem acessar poderá conversar com minha experiência profissional e explorar projetos e decisões técnicas através do próprio sistema que está sendo apresentado.
+A infraestrutura inicial e o deployment já estão funcionando. Agora avanço para o núcleo do RAG: chunking, embeddings, indexação, retrieval e geração das respostas.
+📐 Nas imagens, compartilho a arquitetura high-level da solução e o fluxo de deployment com Terraform, GitHub Actions, Docker e AWS.
+O repositório está público no GitHub para quem quiser acompanhar a implementação e a evolução da arquitetura.
+🔗 Link do repositório nos comentários.
+#BackendEngineering #AIEngineering #RAG #AWS #Python #Terraform #SoftwareArchitecture #EventDrivenArchitecture #CloudEngineering #GitHubActions
