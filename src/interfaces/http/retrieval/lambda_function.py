@@ -5,5 +5,5 @@ def lambda_handler(event, context):
 
     return {
         "statusCode": 200,
-        "body": "Lambda executed!"
+        "body": "Lambda Retrieval executed!"
     }
