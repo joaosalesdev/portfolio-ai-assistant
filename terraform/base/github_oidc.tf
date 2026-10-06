@@ -18,8 +18,8 @@ resource "aws_iam_role" "github_actions" {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           "token.actions.githubusercontent.com:sub" = [
-            "repo:joaosalesdev/portfolio-ai-assistant:ref:refs/heads/main",
-            "repo:joaosalesdev/portfolio-ai-assistant:environment:dev"
+            "repo:joaosalesdev@279781988/portfolio-ai-assistant@1374924500:ref:refs/heads/main",
+            "repo:joaosalesdev@279781988/portfolio-ai-assistant@1374924500:environment:dev"
           ]
         }
       }
