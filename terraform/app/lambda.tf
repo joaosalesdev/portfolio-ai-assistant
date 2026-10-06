@@ -9,6 +9,11 @@ resource "aws_lambda_function" "indexing" {
   package_type  = "Image"
   image_uri     = var.indexing_image_uri
   architectures = ["x86_64"]
+
+  depends_on = [
+    aws_cloudwatch_log_group.indexing,
+    aws_iam_role_policy.indexing_logs
+  ]
 }
 
 
@@ -21,4 +26,9 @@ resource "aws_lambda_function" "retrieval" {
   package_type  = "Image"
   image_uri     = var.retrieval_image_uri
   architectures = ["x86_64"]
+
+  depends_on = [
+    aws_cloudwatch_log_group.retrieval,
+    aws_iam_role_policy.retrieval_logs
+  ]
 }
