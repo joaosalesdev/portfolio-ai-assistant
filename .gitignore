@@ -293,3 +293,4 @@ terraform.rc
 .terraform.lock.hcl
 
 .build
+knowledge_base
