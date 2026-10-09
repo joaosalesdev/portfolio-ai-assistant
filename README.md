@@ -179,6 +179,16 @@ As configurações em `terraform/base/providers.tf` e
 distintas. Para utilizá-las em outra conta, revisar backend, região,
 credenciais externas e nomes antes de inicializar.
 
+### Retenção de imagens no ECR
+
+O `base` configura uma política de lifecycle em cada repositório (`indexing` e
+`retrieval`) para manter somente as três imagens mais recentes por data de push,
+incluindo imagens com ou sem tags. Após aplicar a política, o ECR remove as
+imagens excedentes automaticamente; a limpeza pode levar até 24 horas.
+A retenção considera pushes, não deploys bem-sucedidos: uma imagem em uso pela
+Lambda ou necessária para rollback pode ser removida se ficar fora das três
+mais recentes.
+
 ### Bucket de documentos
 
 O `base` cria o bucket `${project_name}-documents-${account_id}-${aws_region}`,

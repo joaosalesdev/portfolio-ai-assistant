@@ -1,4 +1,4 @@
-# A implementar primeiro: repositórios das imagens de indexing e retrieval.
+# Repositórios das imagens de indexing e retrieval.
 
 resource "aws_ecr_repository" "indexing" {
   name                 = "${var.project_name}-indexing"
@@ -16,6 +16,30 @@ resource "aws_ecr_repository" "retrieval" {
   image_scanning_configuration {
     scan_on_push = true
   }
+}
+
+# Retém as três imagens mais recentes por data de push, com ou sem tags.
+resource "aws_ecr_lifecycle_policy" "retain_latest" {
+  for_each = {
+    indexing  = aws_ecr_repository.indexing.name
+    retrieval = aws_ecr_repository.retrieval.name
+  }
+
+  repository = each.value
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep only the 3 most recently pushed images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 3
+      }
+      action = {
+        type = "expire"
+      }
+    }]
+  })
 }
 
 output "indexing_repository_url" {
