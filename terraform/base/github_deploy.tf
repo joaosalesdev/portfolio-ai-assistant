@@ -58,6 +58,7 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "lambda:GetFunctionConfiguration", "lambda:GetFunctionCodeSigningConfig",
           "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
           "lambda:DeleteFunction", "lambda:ListTags",
+          "lambda:AddPermission", "lambda:RemovePermission", "lambda:GetPolicy",
           "lambda:TagResource", "lambda:UntagResource", "lambda:ListVersionsByFunction"
         ]
         Resource = local.app_lambda_arns
@@ -95,6 +96,12 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Resource = concat(local.app_log_arns, [
           for arn in local.app_log_arns : trimsuffix(arn, ":*")
         ])
+      },
+      {
+        Sid      = "DocumentsBucketNotifications"
+        Effect   = "Allow"
+        Action   = ["s3:GetBucketNotification", "s3:PutBucketNotification"]
+        Resource = aws_s3_bucket.documents.arn
       },
       {
         Sid      = "DescribeLogGroups"

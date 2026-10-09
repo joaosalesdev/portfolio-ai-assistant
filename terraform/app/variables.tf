@@ -4,6 +4,17 @@ variable "project_name" {
   default     = "portfolio-ai-assistant"
 }
 
+variable "documents_prefix" {
+  description = "Prefixo dos documentos aprovados que podem disparar indexing."
+  type        = string
+  default     = "documents/"
+
+  validation {
+    condition     = length(var.documents_prefix) > 0 && endswith(var.documents_prefix, "/")
+    error_message = "Use um prefixo não vazio terminado em /, como documents/."
+  }
+}
+
 variable "aws_region" {
   description = "Região AWS escolhida para os recursos."
   type        = string

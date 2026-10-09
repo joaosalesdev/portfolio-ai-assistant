@@ -1,3 +1,6 @@
 project_name = "portfolio-ai-assistant"
 # Escolha a região antes de usar; não coloque credenciais neste arquivo.
 # aws_region = "eu-west-1"
+
+# Apenas uploads neste prefixo disparam indexing.
+# documents_prefix = "documents/"

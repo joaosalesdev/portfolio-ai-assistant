@@ -98,14 +98,14 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
 | GitHub/AWS | OIDC existente consultado; role e permissões de publicação criadas; permissões de deploy e políticas ECR definidas em base |
 | GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply; configuração de aprovação no environment dev e execução AWS pendentes |
-| S3 de documentos e notificação | Arquivos reservados, sem recursos implementados |
+| S3 de documentos e notificação | Bucket privado definido em base; evento ObjectCreated e leitura pela Lambda definidos em app; apply pendente |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
-| Testes | Três testes Terraform com AWS simulado e teste de invocação dos containers; pytest ainda sem testes coletáveis |
+| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; pytest ainda sem testes coletáveis |
 | Scripts de invocação | Ainda não implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
-do futuro bucket de documentos do RAG.
+do bucket de documentos do RAG.
 
 ## Organização do código
 
@@ -178,6 +178,30 @@ As configurações em `terraform/base/providers.tf` e
 `terraform/app/providers.tf` referenciam o mesmo bucket S3 de estado, com chaves
 distintas. Para utilizá-las em outra conta, revisar backend, região,
 credenciais externas e nomes antes de inicializar.
+
+### Bucket de documentos
+
+O `base` cria o bucket `${project_name}-documents-${account_id}-${aws_region}`,
+com bloqueio de acesso público, ACLs desabilitadas, criptografia SSE-S3 e
+versionamento. `force_destroy = false` e `prevent_destroy = true` protegem os
+documentos contra remoção pelo Terraform.
+
+Execute e revise o `plan` de `base` e aplique-o antes do deploy de `app`.
+Isso cria o bucket e atualiza as permissões da role de deploy. Os dois estados
+precisam usar os mesmos `project_name`, conta AWS e `aws_region`.
+O nome pode ser consultado com `terraform -chdir=terraform/base output documents_bucket_name`.
+
+O `app` gerencia exclusivamente a configuração de notificações do bucket e a
+permissão para o S3 invocar a Lambda de indexing. Uploads sob `documents/`
+disparam `s3:ObjectCreated:*`, inclusive uploads multipart. O prefixo é
+configurável por `documents_prefix`; a role da Lambda só pode ler objetos e
+versões sob esse prefixo. Uploads fora dele não disparam indexing.
+
+Esta alteração prepara a infraestrutura: a imagem atual de indexing ainda
+retorna mensagem fixa e não processa os documentos. O handler S3 e o pipeline
+precisam ser implementados, com tratamento de eventos duplicados e fora de
+ordem e leitura da versão indicada no evento. Exclusões não disparam eventos
+nesta configuração. Nenhum arquivo é enviado pelo Terraform.
 
 ### Deployment Workflow
 
