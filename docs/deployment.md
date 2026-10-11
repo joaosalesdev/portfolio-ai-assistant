@@ -1,7 +1,9 @@
 # Deployment Workflow
 
 O workflow em `.github/workflows/deploy.yml` implanta o ambiente **dev**, usando
-o backend S3 existente. Ainda não há um ambiente de produção separado.
+o backend S3 existente. O mantenedor confirmou em 12/10/2026 que o deploy está
+funcionando e que as Lambdas foram testadas na AWS, retornando mensagens fixas.
+Ainda não há um ambiente de produção separado nem um pipeline RAG funcional.
 Terraform base continua sendo aplicado localmente quando seus recursos mudam.
 
 ## Preparação antes do primeiro push
@@ -60,14 +62,17 @@ precisar repetir um job; use **Re-run all jobs**.
 
 ## Verificação
 
-Após o apply, confira os outputs dos nomes e ARNs das funções e seus grupos
+Após o apply, confira as funções no console AWS e seus grupos
 `/aws/lambda/portfolio-ai-assistant-indexing` e
 `/aws/lambda/portfolio-ai-assistant-retrieval`, com retenção de 30 dias.
-Este primeiro deploy ainda não cria Function URL nem conecta notificações S3.
-As imagens continuam usando os handlers mínimos.
+O Terraform atual ainda não cria Function URL. A notificação S3 para indexing
+está definida em `terraform/app/events.tf`; a validação específica do fluxo de
+upload até a Lambda ainda não foi registrada. As imagens continuam usando os
+handlers mínimos, cuja invocação na AWS já foi testada pelo mantenedor.
 
-Rollback automatizado e verificação da função implantada na AWS ainda não foram
-implementados. Para rollback, será necessário gerar e revisar um novo plano
+Rollback automatizado e verificação automatizada das funções na AWS após o
+deploy ainda não foram implementados. A invocação das funções implantadas já
+foi validada pelo mantenedor. Para rollback, será necessário gerar e revisar um novo plano
 com os digests anteriores.
 
 Referências: [environments e aprovação no GitHub](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)

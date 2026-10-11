@@ -8,10 +8,11 @@ evidência suficiente.
 **Em desenvolvimento.** O repositório contém handlers mínimos e definições Terraform
 para duas Lambdas configuradas com imagens Docker por digest. Os Dockerfiles estão
 implementados; o build e a invocação local dos handlers foram validados.
-O pipeline RAG está pendente. Terraform app foi adaptado para imagens por digest
-e o workflow de deploy foi implementado, mas sua execução na AWS ainda não foi validada.
-Esta documentação descreve o código e a
-arquitetura planejada; não comprova deploy ou operação em produção.
+O deploy na AWS está funcionando: as duas Lambdas estão implantadas e foram
+testadas, retornando as mensagens fixas dos handlers atuais. Essa validação foi
+confirmada pelo mantenedor em 12/10/2026. O pipeline RAG ainda está pendente;
+a operação validada corresponde às funções mínimas no ambiente dev, sem chat
+integrado ou respostas geradas por IA.
 
 ## Problema e objetivo
 
@@ -80,7 +81,7 @@ Similaridade não será interpretada como garantia de verdade.
 - PostgreSQL + pgvector; Neon permanece como candidato de hospedagem.
 - Terraform para recursos AWS e roles IAM separadas.
 - CloudWatch para logs e métricas.
-- GitHub Actions para testes, build e deploy em uma etapa posterior.
+- GitHub Actions implementado para validação, build, publicação e deploy.
 
 Provedores/modelos de embeddings e geração ainda serão escolhidos.
 
@@ -89,16 +90,16 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | Componente | Situação no código |
 | --- | --- |
 | Terraform | Separado em base/app, com estados distintos no backend S3 |
-| Lambdas | Duas funções definidas com imagens Docker por digest e arquitetura x86_64 |
+| Lambdas | Duas funções implantadas na AWS e testadas com mensagens fixas; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
 | Handlers utilizados pelo Terraform | Retornam mensagem fixa; não executam RAG |
 | Entrada S3 | Eventos entregues ao handler atual de indexing; processamento ainda pendente |
-| Dockerfiles | Imagens Python 3.14 com handlers mínimos; build e invocação validados localmente |
+| Dockerfiles | Imagens Python 3.14 com handlers mínimos; invocação validada localmente e nas Lambdas implantadas na AWS |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
-| GitHub/AWS | OIDC existente consultado; role e permissões de publicação criadas; permissões de deploy e políticas ECR definidas em base |
-| GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply; configuração de aprovação no environment dev e execução AWS pendentes |
-| S3 de documentos e notificação | Bucket privado definido em base; evento ObjectCreated e leitura pela Lambda definidos em app; apply pendente |
+| GitHub/AWS | Integração OIDC e permissões para publicação e deploy implementadas; deploy na AWS confirmado pelo mantenedor |
+| GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply implementado; deploy funcionando na AWS; configuração de required reviewers não documentada como validada |
+| S3 de documentos e notificação | Bucket privado, evento ObjectCreated e permissão de leitura definidos; validação específica do fluxo upload → Lambda ainda não registrada |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
 | Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; pytest ainda sem testes coletáveis |
@@ -235,16 +236,16 @@ nesta configuração. Nenhum arquivo é enviado pelo Terraform.
 
 ### Deployment Workflow
 
-![Fluxo de deploy: Terraform base prepara ECR e acesso à AWS; GitHub Actions publica imagens e executa Terraform app para criar ou atualizar Lambdas](docs/diagrams/02-deployment-workflow.png)
+![Fluxo de deploy: Terraform base prepara ECR e acesso à AWS; GitHub Actions publica imagens e executa Terraform app para criar ou atualizar Lambdas](docs/diagrams/02-deployment-architecture.png)
 
-[Abrir o fluxo de deploy em tamanho original](docs/diagrams/02-deployment-workflow.png).
+[Abrir o fluxo de deploy em tamanho original](docs/diagrams/02-deployment-architecture.png).
 
-O diagrama representa o fluxo planejado:
+O diagrama representa o fluxo de deploy implementado:
 
 1. Terraform `base`, executado inicialmente na máquina local, cria o ECR e
    configura o acesso do GitHub à AWS via OIDC. O provider OIDC existente é
    reutilizado. A base volta a ser aplicada quando seus recursos mudam.
-2. Um push na branch `main` dispara o GitHub Actions, que deverá executar os
+2. Um push na branch `main` dispara o GitHub Actions, que executa os
    testes, construir as duas imagens Docker e publicá-las no ECR.
 3. No mesmo pipeline, o Actions passa as URIs com os digests das imagens ao
    Terraform `app`, executa o plan e, após aprovação, aplica o plano.
@@ -261,11 +262,11 @@ configuração de required reviewers no GitHub; a declaração do environment no
 YAML, sozinha, não exige aprovação.
 
 Veja [como preparar e executar o deploy](docs/deployment.md).
-A execução completa na AWS e os procedimentos de rollback ainda estão pendentes.
-
-Nenhum comando de aplicação de infraestrutura foi executado para esta revisão
-do README. A existência de recursos definidos no código não confirma seu estado
-na AWS.
+O deploy e a invocação das Lambdas na AWS foram confirmados pelo mantenedor
+em 12/10/2026, com retorno das mensagens fixas esperadas. Os procedimentos de
+rollback e a verificação automatizada das funções após o deploy ainda estão
+pendentes. Essa confirmação não abrange o pipeline RAG nem a integração do chat,
+que ainda serão implementados.
 
 ## Segurança e operação
 
@@ -286,8 +287,8 @@ antes de publicá-los.
 
 ## Avaliação e próximos passos
 
-1. Aplicar as permissões atualizadas da base e configurar a aprovação no environment dev.
-2. Executar e validar o workflow completo de publicação e deploy das Lambdas.
+1. Verificar a configuração de aprovação no environment dev e aplicar a base quando seus recursos mudarem.
+2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
 4. Implementar leitura, chunking, embeddings e persistência com testes.
 5. Conectar a indexação ao S3 e validar atualização/exclusão de documentos.
