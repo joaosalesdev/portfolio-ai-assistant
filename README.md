@@ -93,7 +93,7 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
 | Handlers utilizados pelo Terraform | Retornam mensagem fixa; não executam RAG |
-| Entrada S3 | Arquivo reservado, ainda levanta `NotImplementedError` |
+| Entrada S3 | Eventos entregues ao handler atual de indexing; processamento ainda pendente |
 | Dockerfiles | Imagens Python 3.14 com handlers mínimos; build e invocação validados localmente |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
 | GitHub/AWS | OIDC existente consultado; role e permissões de publicação criadas; permissões de deploy e políticas ECR definidas em base |
@@ -102,7 +102,7 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
 | Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; pytest ainda sem testes coletáveis |
-| Scripts de invocação | Ainda não implementados |
+| Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
 do bucket de documentos do RAG.
@@ -113,10 +113,9 @@ do bucket de documentos do RAG.
 portfolio-ai-assistant/
 ├── src/
 │   ├── interfaces/
-│   │   ├── http/
-│   │   │   ├── indexing/lambda_function.py
-│   │   │   └── retrieval/lambda_function.py
-│   │   └── events/s3_handler.py
+│   │   └── lambda_handlers/
+│   │       ├── indexing.py
+│   │       └── retrieval.py
 │   ├── ingestion/          # Leitura e chunking
 │   ├── embeddings/         # Vetorização de documentos e perguntas
 │   ├── retrieval/          # Busca e seleção de contexto
@@ -133,7 +132,7 @@ portfolio-ai-assistant/
 ├── docs/diagrams/         # Arquitetura e fluxo de deploy
 ├── requirements.txt
 ├── pytest.ini
-├── Makefile
+├── Makefile               # Reservado para testes e tarefas futuras
 └── README.md
 ```
 
@@ -141,10 +140,10 @@ A organização separa interfaces de entrada, processamento e persistência. Os
 handlers deverão traduzir eventos e chamar serviços; clientes externos serão
 injetados quando necessário para permitir testes sem AWS ou chamadas pagas.
 
-Atualmente, as imagens usam as entradas de `interfaces/http/indexing/` e
-`interfaces/http/retrieval/`. O nome da pasta não cria um endpoint HTTP. A futura
-indexação por S3 deverá ser conectada a `interfaces/events/s3_handler.py`, e as
-entradas configuradas nas imagens serão alinhadas durante a migração para Docker.
+As imagens usam os handlers `interfaces/lambda_handlers/indexing.py` e
+`interfaces/lambda_handlers/retrieval.py`. Indexing recebe eventos S3; retrieval
+será a entrada de consulta HTTP. O processamento dos documentos ainda será
+implementado no fluxo de indexing.
 
 ## Desenvolvimento local
 
@@ -153,16 +152,18 @@ Criar um ambiente virtual e instalar as dependências de desenvolvimento:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-make install-dev
+python -m pip install -r requirements.txt
 ```
 
-O alvo instala `requirements.txt` e pytest. Ainda não há dependências de runtime
-para os provedores de modelos ou banco.
+Ainda não há dependências de runtime para os provedores de modelos ou banco.
+O `Makefile` está reservado para testes e outras tarefas futuras; não possui
+comandos implementados.
 
-Quando os testes forem implementados:
+Quando os testes unitários forem implementados, instale pytest e execute:
 
 ```bash
-make test
+python -m pip install 'pytest>=8.3,<10'
+python -m pytest
 ```
 
 No estado atual, o pytest não encontra testes e retorna código 5. Os JSONs em
@@ -171,6 +172,25 @@ No estado atual, o pytest não encontra testes e retorna código 5. Os JSONs em
 O evento de consulta representa o envelope entregue pela Function URL. Em uma
 requisição HTTP real, o cliente enviará apenas o JSON da pergunta presente em
 `body`, não o envelope inteiro.
+
+Para invocar o handler de indexing diretamente no Python local:
+
+```bash
+python3 scripts/invoke_indexing.py
+```
+
+O script usa `tests/events/indexing/s3_object_created.json`; edite esse JSON
+para testar outro evento.
+O contexto é `None`. Este comando não invoca a Lambda na AWS nem usa Docker;
+executa o handler Python atual, que apenas registra o evento e retorna uma
+mensagem fixa. Quando integrações externas forem adicionadas ao handler, elas
+também serão executadas pela invocação local.
+
+Para depurar no VS Code, selecione o interpretador da `.venv` com
+**Python: Select Interpreter**. Na configuração de execução local do
+`launch.json`, use `scripts/invoke_indexing.py` como programa. Coloque um
+breakpoint no handler e inicie a depuração com **F5**. A configuração do VS Code
+é local; a invocação pelo terminal acima também funciona sem ela.
 
 ## Terraform e deploy
 
@@ -208,7 +228,7 @@ configurável por `documents_prefix`; a role da Lambda só pode ler objetos e
 versões sob esse prefixo. Uploads fora dele não disparam indexing.
 
 Esta alteração prepara a infraestrutura: a imagem atual de indexing ainda
-retorna mensagem fixa e não processa os documentos. O handler S3 e o pipeline
+retorna mensagem fixa e não processa os documentos. O processamento do evento S3 no handler de indexing e o pipeline
 precisam ser implementados, com tratamento de eventos duplicados e fora de
 ordem e leitura da versão indicada no evento. Exclusões não disparam eventos
 nesta configuração. Nenhum arquivo é enviado pelo Terraform.

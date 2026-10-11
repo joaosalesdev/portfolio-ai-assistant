@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir \
 
 COPY src/ ${LAMBDA_TASK_ROOT}/
 
-CMD ["interfaces.http.indexing.lambda_function.lambda_handler"]
+CMD ["interfaces.lambda_handlers.indexing.lambda_handler"]

@@ -1,4 +1,4 @@
-"""Futura invocação de interfaces.http.lambda_handler com tests/events/retrieval/*.json."""
+"""Futura invocação de interfaces.lambda_handlers.retrieval.lambda_handler com tests/events/retrieval/*.json."""
 
 
 if __name__ == "__main__":

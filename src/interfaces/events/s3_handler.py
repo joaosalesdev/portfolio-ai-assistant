@@ -1,6 +1,0 @@
-"""Entrada S3 da Lambda portfolio-ai-assistant-indexing; implementação pendente."""
-
-
-def handler(event, context):
-    """O pipeline ainda não está implementado; não retornar sucesso fictício."""
-    raise NotImplementedError("Pipeline de indexing ainda não implementado")

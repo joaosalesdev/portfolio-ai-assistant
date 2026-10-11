@@ -1,4 +1,4 @@
-# A implementar: provider AWS usando var.aws_region e autenticação externa.
+# Provider AWS usando var.aws_region e autenticação externa.
 # Nunca inserir access keys neste arquivo.
 
 terraform {
@@ -6,11 +6,6 @@ terraform {
     aws = {
       source  = "hashicorp/aws"
       version = "6.67.0"
-    }
-
-    archive = {
-      source  = "hashicorp/archive"
-      version = "2.8.1"
     }
   }
 
