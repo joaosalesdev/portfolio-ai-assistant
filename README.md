@@ -9,10 +9,14 @@ evidência suficiente.
 para duas Lambdas configuradas com imagens Docker por digest. Os Dockerfiles estão
 implementados; o build e a invocação local dos handlers foram validados.
 O deploy na AWS está funcionando: as duas Lambdas estão implantadas e foram
-testadas, retornando as mensagens fixas dos handlers atuais. Essa validação foi
+testadas, retornando mensagens fixas dos handlers então implantados. Essa validação foi
 confirmada pelo mantenedor em 12/10/2026. O pipeline RAG ainda está pendente;
 a operação validada corresponde às funções mínimas no ambiente dev, sem chat
 integrado ou respostas geradas por IA.
+
+No código local, a primeira etapa de indexing já está implementada: validação
+e interpretação de eventos S3, com cinco testes pytest aprovados. O deploy
+dessa nova etapa ainda não foi confirmado.
 
 ## Problema e objetivo
 
@@ -93,16 +97,16 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | Lambdas | Duas funções implantadas na AWS e testadas com mensagens fixas; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers utilizados pelo Terraform | Retornam mensagem fixa; não executam RAG |
-| Entrada S3 | Eventos entregues ao handler atual de indexing; processamento ainda pendente |
+| Handlers | Indexing valida eventos S3 e extrai os objetos; retrieval retorna mensagem fixa; não executam RAG |
+| Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura do documento pendente |
 | Dockerfiles | Imagens Python 3.14 com handlers mínimos; invocação validada localmente e nas Lambdas implantadas na AWS |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
 | GitHub/AWS | Integração OIDC e permissões para publicação e deploy implementadas; deploy na AWS confirmado pelo mantenedor |
 | GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply implementado; deploy funcionando na AWS; configuração de required reviewers não documentada como validada |
-| S3 de documentos e notificação | Bucket privado, evento ObjectCreated e permissão de leitura definidos; validação específica do fluxo upload → Lambda ainda não registrada |
+| S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, mas leitura do objeto ainda não implementada |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
-| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; pytest ainda sem testes coletáveis |
+| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; cinco testes unitários pytest da interpretação do evento S3 |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -114,6 +118,7 @@ do bucket de documentos do RAG.
 portfolio-ai-assistant/
 ├── src/
 │   ├── interfaces/
+│   │   ├── s3_event_parser.py  # Validação e interpretação do evento S3
 │   │   └── lambda_handlers/
 │   │       ├── indexing.py
 │   │       └── retrieval.py
@@ -123,14 +128,14 @@ portfolio-ai-assistant/
 │   ├── generation/         # Respostas fundamentadas
 │   └── persistence/        # Operações PostgreSQL + pgvector
 ├── tests/
-│   ├── unit/              # Pastas por módulo, ainda sem testes
+│   ├── unit/              # Testes da entrada S3 e pastas por módulo
 │   └── events/            # Exemplos S3 e HTTP
 ├── scripts/               # Invocação das funções
 ├── docker/                # Dockerfiles de indexação e consulta
 ├── terraform/
 │   ├── base/              # ECR, OIDC e permissões do GitHub Actions
 │   └── app/               # Lambdas e recursos da aplicação
-├── docs/diagrams/         # Arquitetura e fluxo de deploy
+├── docs/                 # Documentação, diagramas e rascunhos pessoais
 ├── requirements.txt
 ├── pytest.ini
 ├── Makefile               # Reservado para testes e tarefas futuras
@@ -146,9 +151,28 @@ As imagens usam os handlers `interfaces/lambda_handlers/indexing.py` e
 será a entrada de consulta HTTP. O processamento dos documentos ainda será
 implementado no fluxo de indexing.
 
+### Primeira etapa de indexing
+
+O handler chama `interfaces/s3_event_parser.py`, que:
+
+- Exige uma lista `Records` não vazia.
+- Valida a origem `aws:s3` e eventos `ObjectCreated:*`.
+- Extrai bucket, chave decodificada, `versionId` e `sequencer` de cada registro.
+- Aceita múltiplos registros e preserva os campos opcionais quando presentes.
+- Rejeita eventos inválidos com `ValueError`, registrado e propagado pelo handler.
+
+O retorno contém `statusCode`, uma mensagem em inglês e a lista `objects`.
+Isso confirma a validação do evento, não a indexação do documento. Ainda não há
+chamadas ao S3, geração de embeddings ou persistência. O parser pertence a
+`interfaces/` por interpretar o formato externo; a leitura ficará em `ingestion/`.
+
+Os rascunhos pessoais de implementação estão em
+[docs/rascunho-indexing.txt](docs/rascunho-indexing.txt) e
+[docs/rascunho-retrieval.txt](docs/rascunho-retrieval.txt).
+
 ## Desenvolvimento local
 
-Criar um ambiente virtual e instalar as dependências de desenvolvimento:
+Criar e ativar um ambiente virtual e instalar as dependências declaradas:
 
 ```bash
 python3 -m venv .venv
@@ -160,15 +184,20 @@ Ainda não há dependências de runtime para os provedores de modelos ou banco.
 O `Makefile` está reservado para testes e outras tarefas futuras; não possui
 comandos implementados.
 
-Quando os testes unitários forem implementados, instale pytest e execute:
+Para executar os testes unitários, instale pytest no ambiente virtual:
 
 ```bash
 python -m pip install 'pytest>=8.3,<10'
 python -m pytest
 ```
 
-No estado atual, o pytest não encontra testes e retorna código 5. Os JSONs em
-`tests/events/` são dados de exemplo, não testes executáveis.
+Para executar somente os testes da entrada S3:
+
+```bash
+python -m pytest tests/unit/test_s3_event.py -v
+```
+
+Os JSONs em `tests/events/` são fixtures; o de indexing reproduz um evento real.
 
 O evento de consulta representa o envelope entregue pela Function URL. Em uma
 requisição HTTP real, o cliente enviará apenas o JSON da pergunta presente em
@@ -183,9 +212,9 @@ python3 scripts/invoke_indexing.py
 O script usa `tests/events/indexing/s3_object_created.json`; edite esse JSON
 para testar outro evento.
 O contexto é `None`. Este comando não invoca a Lambda na AWS nem usa Docker;
-executa o handler Python atual, que apenas registra o evento e retorna uma
-mensagem fixa. Quando integrações externas forem adicionadas ao handler, elas
-também serão executadas pela invocação local.
+executa o handler Python atual, que valida o evento e retorna os dados dos
+objetos, sem ler documentos no S3. Quando integrações externas forem adicionadas
+ao handler, elas também serão executadas pela invocação local.
 
 Para depurar no VS Code, selecione o interpretador da `.venv` com
 **Python: Select Interpreter**. Na configuração de execução local do
@@ -228,9 +257,9 @@ disparam `s3:ObjectCreated:*`, inclusive uploads multipart. O prefixo é
 configurável por `documents_prefix`; a role da Lambda só pode ler objetos e
 versões sob esse prefixo. Uploads fora dele não disparam indexing.
 
-Esta alteração prepara a infraestrutura: a imagem atual de indexing ainda
-retorna mensagem fixa e não processa os documentos. O processamento do evento S3 no handler de indexing e o pipeline
-precisam ser implementados, com tratamento de eventos duplicados e fora de
+O handler de indexing no código local valida o evento e extrai os dados dos
+objetos, mas não lê os documentos. O pipeline
+ainda precisa ser implementado, com tratamento de eventos duplicados e fora de
 ordem e leitura da versão indicada no evento. Exclusões não disparam eventos
 nesta configuração. Nenhum arquivo é enviado pelo Terraform.
 
@@ -246,9 +275,11 @@ O diagrama representa o fluxo de deploy implementado:
    configura o acesso do GitHub à AWS via OIDC. O provider OIDC existente é
    reutilizado. A base volta a ser aplicada quando seus recursos mudam.
 2. Um push na branch `main` dispara o GitHub Actions, que executa os
-   testes, construir as duas imagens Docker e publicá-las no ECR.
+   testes Terraform e a invocação local dos containers, constrói as duas imagens
+   Docker e publica-as no ECR. Os testes pytest ainda são executados localmente.
 3. No mesmo pipeline, o Actions passa as URIs com os digests das imagens ao
-   Terraform `app`, executa o plan e, após aprovação, aplica o plano.
+   Terraform `app`, executa o plan e aplica o plano no environment dev. A espera
+   por aprovação depende da configuração de required reviewers.
 4. Terraform `app` cria ou atualiza as Lambdas com as imagens publicadas e
    gerencia suas roles IAM e grupos de logs.
 
@@ -291,7 +322,7 @@ antes de publicá-los.
 2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
 4. Implementar leitura, chunking, embeddings e persistência com testes.
-5. Conectar a indexação ao S3 e validar atualização/exclusão de documentos.
+5. Implementar a leitura S3 no indexing e validar atualização/exclusão de documentos.
 6. Implementar consulta, Function URL e integração com o portfólio.
 7. Avaliar retrieval separadamente da geração.
 8. Medir latência, erros, tokens e custos antes de otimizar.

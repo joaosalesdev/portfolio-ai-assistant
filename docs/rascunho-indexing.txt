@@ -1,0 +1,24 @@
+RAG — Indexing Pipeline
+
+1. Event Handler
+- Recebe e valida o evento S3.
+
+2. Document Ingestion
+- Lê o documento no S3 e extrai o conteúdo.
+
+3. Text Preprocessing
+- Limpa e normaliza o texto.
+
+4. Document Chunking
+- Divide o texto em chunks e associa metadados.
+
+5. Embedding Generation
+- Converte os chunks em vetores utilizando um modelo de embeddings.
+
+6. Vector Storage
+- Persiste documentos, chunks, metadados e embeddings no PostgreSQL + pgvector.
+
+7. Indexing Validation
+- Verifica o resultado, regista erros e confirma a indexação.
+
+Fluxo: S3 Event → Ingestion → Preprocessing → Chunking → Embeddings → Vector Storage → Validation.

@@ -1,0 +1,24 @@
+RAG — Retrieval Pipeline
+
+1. Request Handler
+- Recebe e valida a pergunta enviada pelo chat.
+
+2. Query Preprocessing
+- Limpa e normaliza a pergunta.
+
+3. Query Embedding
+- Converte a pergunta em vetor utilizando a mesma configuração de embeddings dos documentos.
+
+4. Vector Search
+- Busca os chunks mais relevantes no PostgreSQL + pgvector por similaridade vetorial.
+
+5. Context Selection
+- Seleciona os chunks recuperados e organiza o contexto com metadados e fontes.
+
+6. Response Generation
+- Utiliza um LLM para gerar uma resposta fundamentada no contexto e informa quando não houver evidência suficiente.
+
+7. Response Validation
+- Verifica o formato da resposta e as referências às fontes, regista erros e prepara o retorno ao chat.
+
+Fluxo: Chat Request → Query Preprocessing → Query Embedding → Vector Search → Context Selection → Response Generation → Response Validation → Chat Response.

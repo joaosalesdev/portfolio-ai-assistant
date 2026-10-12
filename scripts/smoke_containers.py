@@ -2,14 +2,15 @@
 
 import json
 import time
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 
-def invoke(port):
+def invoke(port, event):
     request = Request(
         f"http://127.0.0.1:{port}/2015-03-31/functions/function/invocations",
-        data=b"{}",
+        data=json.dumps(event).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
@@ -28,5 +29,9 @@ def invoke(port):
 
 if __name__ == "__main__":
     for component, port in (("indexing", 9000), ("retrieval", 9001)):
-        invoke(port)
+        event = {}
+        if component == "indexing":
+            path = Path(__file__).resolve().parents[1] / "tests/events/indexing/s3_object_created.json"
+            event = json.loads(path.read_text(encoding="utf-8"))
+        invoke(port, event)
         print(f"{component}: container invocation passed")
