@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from interfaces.lambda_handlers.indexing import lambda_handler
 from interfaces.s3_event_parser import parse_s3_event
 
 
@@ -17,10 +16,7 @@ def s3_event():
 
 
 def test_real_event_preserves_object_identity(s3_event):
-    result = lambda_handler(s3_event, None)
-
-    assert result["statusCode"] == 200
-    assert result["objects"] == [{
+    assert parse_s3_event(s3_event) == [{
         "bucket": "portfolio-ai-assistant-documents-338034595477-us-east-1",
         "key": "documents/career_goals.md",
         "version_id": "cOjYVMxhB81cpYXJrZXLlt3AGeLOykXv",

@@ -15,7 +15,8 @@ a operação validada corresponde às funções mínimas no ambiente dev, sem ch
 integrado ou respostas geradas por IA.
 
 No código local, a primeira etapa de indexing já está implementada: validação
-e interpretação de eventos S3, com cinco testes pytest aprovados. O deploy
+e interpretação de eventos S3, além da leitura de documentos no S3. Os 12
+testes pytest de parsing e ingestão passaram localmente. O deploy
 dessa nova etapa ainda não foi confirmado.
 
 ## Problema e objetivo
@@ -97,16 +98,16 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | Lambdas | Duas funções implantadas na AWS e testadas com mensagens fixas; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3 e extrai os objetos; retrieval retorna mensagem fixa; não executam RAG |
-| Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura do documento pendente |
+| Handlers | Indexing valida eventos S3 e carrega documentos; retrieval retorna mensagem fixa; não executam RAG |
+| Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
 | Dockerfiles | Imagens Python 3.14 com handlers mínimos; invocação validada localmente e nas Lambdas implantadas na AWS |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
 | GitHub/AWS | Integração OIDC e permissões para publicação e deploy implementadas; deploy na AWS confirmado pelo mantenedor |
 | GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply implementado; deploy funcionando na AWS; configuração de required reviewers não documentada como validada |
-| S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, mas leitura do objeto ainda não implementada |
+| S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, leitura do objeto implementada e testada com cliente simulado |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
-| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; cinco testes unitários pytest da interpretação do evento S3 |
+| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 12 casos pytest de interpretação do evento S3 e ingestão |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -161,10 +162,18 @@ O handler chama `interfaces/s3_event_parser.py`, que:
 - Aceita múltiplos registros e preserva os campos opcionais quando presentes.
 - Rejeita eventos inválidos com `ValueError`, registrado e propagado pelo handler.
 
-O retorno contém `statusCode`, uma mensagem em inglês e a lista `objects`.
-Isso confirma a validação do evento, não a indexação do documento. Ainda não há
-chamadas ao S3, geração de embeddings ou persistência. O parser pertence a
-`interfaces/` por interpretar o formato externo; a leitura ficará em `ingestion/`.
+O retorno contém `statusCode`, uma mensagem em inglês, a lista `objects` e
+a contagem `documents_loaded`.
+O handler chama `ingestion/loader.py` para cada objeto. O loader aceita `.md`
+e `.txt`, solicita o objeto por bucket e chave, usa `VersionId` quando presente,
+decodifica o conteúdo em UTF-8 e fecha o corpo da resposta. Documentos vazios,
+formatos não suportados e conteúdo inválido causam erro. Falhas de leitura são
+registradas pelo handler e propagadas, sem retornar sucesso falso.
+
+O loader retorna texto e identificação da fonte para as próximas etapas. O handler
+retorna apenas os objetos e `documents_loaded`, sem expor o conteúdo. Ainda não há
+normalização, chunking, embeddings, persistência ou mecanismo de aprovação de
+conteúdo. O parser pertence a `interfaces/`; a leitura pertence a `ingestion/`.
 
 Os rascunhos pessoais de implementação estão em
 [docs/rascunho-indexing.txt](docs/rascunho-indexing.txt) e
@@ -180,7 +189,8 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Ainda não há dependências de runtime para os provedores de modelos ou banco.
+O `requirements.txt` inclui boto3 para acesso ao S3 e pytest para testes, além
+das dependências transitivas. Ainda não há clientes de modelos ou banco.
 O `Makefile` está reservado para testes e outras tarefas futuras; não possui
 comandos implementados.
 
@@ -213,7 +223,8 @@ O script usa `tests/events/indexing/s3_object_created.json`; edite esse JSON
 para testar outro evento.
 O contexto é `None`. Este comando não invoca a Lambda na AWS nem usa Docker;
 executa o handler Python atual, que valida o evento e retorna os dados dos
-objetos, sem ler documentos no S3. Quando integrações externas forem adicionadas
+objetos e carrega os documentos no S3. Essa invocação agora faz chamadas reais
+à AWS e requer credenciais e permissão de leitura. Quando integrações externas forem adicionadas
 ao handler, elas também serão executadas pela invocação local.
 
 Para depurar no VS Code, selecione o interpretador da `.venv` com
@@ -258,9 +269,9 @@ configurável por `documents_prefix`; a role da Lambda só pode ler objetos e
 versões sob esse prefixo. Uploads fora dele não disparam indexing.
 
 O handler de indexing no código local valida o evento e extrai os dados dos
-objetos, mas não lê os documentos. O pipeline
+objetos e carrega documentos Markdown e texto. O pipeline
 ainda precisa ser implementado, com tratamento de eventos duplicados e fora de
-ordem e leitura da versão indicada no evento. Exclusões não disparam eventos
+ordem. A leitura já utiliza a versão indicada no evento. Exclusões não disparam eventos
 nesta configuração. Nenhum arquivo é enviado pelo Terraform.
 
 ### Deployment Workflow
@@ -321,8 +332,8 @@ antes de publicá-los.
 1. Verificar a configuração de aprovação no environment dev e aplicar a base quando seus recursos mudarem.
 2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
-4. Implementar leitura, chunking, embeddings e persistência com testes.
-5. Implementar a leitura S3 no indexing e validar atualização/exclusão de documentos.
+4. Validar a leitura na AWS e implementar normalização, chunking, embeddings e persistência.
+5. Validar atualização/exclusão de documentos e processamento idempotente.
 6. Implementar consulta, Function URL e integração com o portfólio.
 7. Avaliar retrieval separadamente da geração.
 8. Medir latência, erros, tokens e custos antes de otimizar.

@@ -40,8 +40,9 @@ os nomes dos repositórios estão explícitos no workflow e não são secrets.
 ## Etapas
 
 O job `plan` valida o Terraform, constrói as duas imagens linux/amd64 e invoca
-seus handlers localmente. Este teste verifica o empacotamento e a execução dos
-handlers mínimos; não valida um pipeline RAG.
+seus handlers localmente. Este teste verifica o empacotamento: retrieval retorna uma resposta e indexing
+rejeita um evento vazio com ValueError antes de acessar a AWS. Não valida a leitura
+S3 nem um pipeline RAG.
 
 Depois, assume a role via OIDC, publica as imagens e consulta seus digests.
 As tags incluem commit, execução e tentativa, evitando colisões com as tags
@@ -66,9 +67,9 @@ Após o apply, confira as funções no console AWS e seus grupos
 `/aws/lambda/portfolio-ai-assistant-indexing` e
 `/aws/lambda/portfolio-ai-assistant-retrieval`, com retenção de 30 dias.
 O Terraform atual ainda não cria Function URL. A notificação S3 para indexing
-está definida em `terraform/app/events.tf`; a validação específica do fluxo de
-upload até a Lambda ainda não foi registrada. As imagens continuam usando os
-handlers mínimos, cuja invocação na AWS já foi testada pelo mantenedor.
+está definida em `terraform/app/events.tf`; o fluxo de upload até a Lambda foi confirmado pelo mantenedor com um log real. A invocação dos handlers anteriores, com mensagens fixas, foi testada na AWS.
+O código local de indexing agora lê documentos no S3; seu deploy e a leitura
+real ainda precisam ser validados.
 
 Rollback automatizado e verificação automatizada das funções na AWS após o
 deploy ainda não foram implementados. A invocação das funções implantadas já
