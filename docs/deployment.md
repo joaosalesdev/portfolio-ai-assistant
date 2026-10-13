@@ -39,7 +39,12 @@ os nomes dos repositórios estão explícitos no workflow e não são secrets.
 
 ## Etapas
 
-O job `plan` valida o Terraform, constrói as duas imagens linux/amd64 e invoca
+O job `plan` configura Python 3.14, instala `requirements.txt` e executa
+`python -m pytest -v`. Os testes unitários usam clientes simulados e não acessam
+a AWS. Se algum teste falhar, o job para antes do build, publicação e deploy.
+Alterações em `tests/` ou `pytest.ini` também disparam o workflow na main.
+
+Depois, valida o Terraform, constrói as duas imagens linux/amd64 e invoca
 seus handlers localmente. Este teste verifica o empacotamento: retrieval retorna uma resposta e indexing
 rejeita um evento vazio com ValueError antes de acessar a AWS. Não valida a leitura
 S3 nem um pipeline RAG.

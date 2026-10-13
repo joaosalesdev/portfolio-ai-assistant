@@ -31,7 +31,10 @@ python -m pytest tests/unit/test_s3_event.py -v
 ```
 
 O `pytest.ini` configura os imports a partir de `src/`. Os 12 casos de parsing e ingestão foram
-validados localmente. Eles ainda não fazem parte do workflow de deploy.
+validados localmente. O workflow de deploy agora executa `python -m pytest -v`
+com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
+ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
+configuração no GitHub Actions ainda precisa ser confirmada após o push.
 
 As pastas por módulo estão reservadas para os próximos comportamentos.
 Os JSONs em `tests/events/` são fixtures, não testes executáveis por si só.

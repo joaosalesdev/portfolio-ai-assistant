@@ -286,8 +286,9 @@ O diagrama representa o fluxo de deploy implementado:
    configura o acesso do GitHub à AWS via OIDC. O provider OIDC existente é
    reutilizado. A base volta a ser aplicada quando seus recursos mudam.
 2. Um push na branch `main` dispara o GitHub Actions, que executa os
-   testes Terraform e a invocação local dos containers, constrói as duas imagens
-   Docker e publica-as no ECR. Os testes pytest ainda são executados localmente.
+   testes pytest, os testes Terraform e a invocação local dos containers,
+   constrói as duas imagens Docker e publica-as no ECR. Falhas nos testes
+   interrompem o fluxo antes da publicação e do deploy.
 3. No mesmo pipeline, o Actions passa as URIs com os digests das imagens ao
    Terraform `app`, executa o plan e aplica o plano no environment dev. A espera
    por aprovação depende da configuração de required reviewers.
