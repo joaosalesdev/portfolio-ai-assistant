@@ -15,8 +15,8 @@ a operação validada corresponde às funções mínimas no ambiente dev, sem ch
 integrado ou respostas geradas por IA.
 
 No código local, a primeira etapa de indexing já está implementada: validação
-e interpretação de eventos S3, além da leitura de documentos no S3. Os 12
-testes pytest de parsing e ingestão passaram localmente. O deploy
+e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. Os 16
+testes pytest de parsing, ingestão e normalização passaram localmente. O deploy
 dessa nova etapa ainda não foi confirmado.
 
 ## Problema e objetivo
@@ -107,7 +107,7 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, leitura do objeto implementada e testada com cliente simulado |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
-| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 12 casos pytest de interpretação do evento S3 e ingestão |
+| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 16 casos pytest de interpretação do evento S3, ingestão e normalização |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -123,7 +123,7 @@ portfolio-ai-assistant/
 │   │   └── lambda_handlers/
 │   │       ├── indexing.py
 │   │       └── retrieval.py
-│   ├── ingestion/          # Leitura e chunking
+│   ├── ingestion/          # Leitura, normalização e chunking
 │   ├── embeddings/         # Vetorização de documentos e perguntas
 │   ├── retrieval/          # Busca e seleção de contexto
 │   ├── generation/         # Respostas fundamentadas
@@ -171,8 +171,10 @@ formatos não suportados e conteúdo inválido causam erro. Falhas de leitura s�
 registradas pelo handler e propagadas, sem retornar sucesso falso.
 
 O loader retorna texto e identificação da fonte para as próximas etapas. O handler
-retorna apenas os objetos e `documents_loaded`, sem expor o conteúdo. Ainda não há
-normalização, chunking, embeddings, persistência ou mecanismo de aprovação de
+retorna apenas os objetos e `documents_loaded`, sem expor o conteúdo. O handler normaliza o texto com `ingestion/preprocessor.py`: padroniza quebras
+de linha, remove espaços finais sem significado e reduz linhas vazias excessivas
+fora de blocos de código. Preserva indentação, blocos de código e quebras de linha
+Markdown com dois espaços. Ainda não há chunking, embeddings, persistência ou mecanismo de aprovação de
 conteúdo. O parser pertence a `interfaces/`; a leitura pertence a `ingestion/`.
 
 Os rascunhos pessoais de implementação estão em
@@ -333,7 +335,7 @@ antes de publicá-los.
 1. Verificar a configuração de aprovação no environment dev e aplicar a base quando seus recursos mudarem.
 2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
-4. Validar a leitura na AWS e implementar normalização, chunking, embeddings e persistência.
+4. Validar o preprocessing na AWS e implementar chunking, embeddings e persistência.
 5. Validar atualização/exclusão de documentos e processamento idempotente.
 6. Implementar consulta, Function URL e integração com o portfólio.
 7. Avaliar retrieval separadamente da geração.

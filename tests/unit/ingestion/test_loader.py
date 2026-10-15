@@ -7,6 +7,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from ingestion.loader import load_document
+from ingestion.preprocessor import preprocess_text
 from interfaces.lambda_handlers.indexing import lambda_handler
 
 
@@ -68,8 +69,12 @@ def test_handler_loads_each_document(monkeypatch):
     record = {"eventSource": "aws:s3", "eventName": "ObjectCreated:Put",
               "s3": {"bucket": {"name": "test-bucket"}, "object": {"key": "documents/career.md"}}}
 
+    preprocessor = Mock(wraps=preprocess_text)
+    monkeypatch.setattr("interfaces.lambda_handlers.indexing.preprocess_text", preprocessor)
+
     result = lambda_handler({"Records": [record, record]}, None)
 
+    assert preprocessor.call_count == 2
     assert result["documents_loaded"] == 2
     assert client.get_object.call_count == 2
     assert "text" not in result["objects"][0]

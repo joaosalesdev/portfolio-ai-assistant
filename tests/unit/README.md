@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 12 casos de parsing e ingestão foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 16 casos de parsing, ingestão e normalização foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -48,4 +48,15 @@ O cliente S3 é simulado com `unittest.mock`, disponível no Python; os testes s
 
 ```bash
 python -m pytest tests/unit/ingestion/test_loader.py -v
+```
+
+## Normalização
+
+`ingestion/test_preprocessor.py` contém quatro testes para normalização de
+quebras de linha e espaços, preservação de Markdown e código e idempotência
+(processar o texto duas vezes mantém o mesmo resultado). O teste do handler
+confere que o preprocessor é chamado para cada documento.
+
+```bash
+python -m pytest tests/unit/ingestion/test_preprocessor.py -v
 ```
