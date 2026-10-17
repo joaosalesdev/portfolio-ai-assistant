@@ -15,7 +15,7 @@ a operação validada corresponde às funções mínimas no ambiente dev, sem ch
 integrado ou respostas geradas por IA.
 
 No código local, a primeira etapa de indexing já está implementada: validação
-e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. O chunking também está implementado. A geração de embeddings também está implementada. Os 28
+e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. O chunking também está implementado. A geração de embeddings também está implementada. Os 33
 testes pytest passaram localmente, com clientes externos simulados. O deploy
 dessa nova etapa ainda não foi confirmado.
 
@@ -99,7 +99,7 @@ respostas ainda será escolhido.
 | Lambdas | Duas funções implantadas na AWS e testadas com mensagens fixas; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3, prepara documentos e gera embeddings; retrieval retorna mensagem fixa; não executam RAG |
+| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval retorna mensagem fixa; não executam RAG |
 | Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
 | Dockerfiles | Imagens Python 3.14 com handlers mínimos; invocação validada localmente e nas Lambdas implantadas na AWS |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
@@ -108,8 +108,9 @@ respostas ainda será escolhido.
 | S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, leitura do objeto implementada e testada com cliente simulado |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
-| Retrieval, geração e persistência | Módulos reservados |
-| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 28 casos pytest de parsing, ingestão, chunking e embeddings |
+| Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; testes simulados, validação real pendente |
+| Retrieval e geração | Módulos reservados |
+| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 33 casos pytest de parsing, ingestão, chunking e embeddings |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -176,7 +177,7 @@ O loader retorna texto e identificação da fonte para as próximas etapas. O ha
 retorna apenas os objetos, `documents_loaded` e `chunks_created`, sem expor o conteúdo. O handler normaliza o texto com `ingestion/preprocessor.py`: padroniza quebras
 de linha, remove espaços finais sem significado e reduz linhas vazias excessivas
 fora de blocos de código. Preserva indentação, blocos de código e quebras de linha
-Markdown com dois espaços. Ainda não há persistência ou mecanismo de aprovação de
+Markdown com dois espaços. Ainda não há mecanismo de aprovação de
 conteúdo. O parser pertence a `interfaces/`; a leitura pertence a `ingestion/`.
 
 Os rascunhos pessoais de implementação estão em
@@ -197,8 +198,7 @@ apenas por espaços em branco retorna uma lista vazia; limites inválidos geram 
 
 O tamanho é medido em caracteres, não tokens. Títulos e blocos de código podem
 ser separados quando ultrapassam o limite; identificação de seções e ajustes de
-sobreposição ficam para avaliação posterior. Os chunks permanecem em memória,
-com embeddings gerados na etapa seguinte, ainda sem persistência. Logs registram contagens,
+sobreposição ficam para avaliação posterior. Os chunks recebem embeddings na etapa seguinte e são enviados à persistência. Logs registram contagens,
 sem imprimir o conteúdo completo dos documentos.
 
 ### Embeddings
@@ -211,8 +211,7 @@ O resultado preserva texto e metadados, acrescentando `embedding`,
 
 O handler usa o SDK OpenAI com timeout de 20 segundos por tentativa e até duas
 retentativas. Falhas são registradas e propagadas. O retorno inclui apenas a
-contagem `embeddings_generated`, sem expor vetores ou texto. Os vetores ainda
-ficam em memória e não são salvos. Reexecutar um evento repete as chamadas pagas.
+contagem `embeddings_generated`, sem expor vetores ou texto. Os vetores são enviados ao repositório PostgreSQL após sua geração. Reexecutar um evento repete as chamadas pagas.
 
 A variável `OPENAI_API_KEY` deve estar disponível no processo; `.env` não é
 carregado automaticamente. A execução local agora chama a API e pode gerar custos.
@@ -221,6 +220,35 @@ não configura a entrega do secret. Não inserir a chave no código ou no Git.
 O timeout de indexing no Terraform foi elevado para 120 segundos; lotes de
 muitos documentos ainda podem exceder esse limite. Não há orçamento global de
 execução nesta versão inicial.
+
+### Persistência PostgreSQL + pgvector
+
+A extensão `vector` já foi confirmada pelo mantenedor. Antes de invocar o novo
+handler, execute [sql/001_vector_storage.sql](sql/001_vector_storage.sql) no banco
+alvo, por exemplo pelo editor SQL do DBeaver. O script cria `portfolio_documents`
+e `portfolio_chunks` com `vector(1536)`. Ele não é executado automaticamente pelo
+handler. Para tabelas já existentes, revise sua compatibilidade; `IF NOT EXISTS`
+não atualiza esquemas antigos.
+
+Configure `DATABASE_URL` no processo (e separadamente na Lambda), com os parâmetros
+TLS exigidos pelo provedor. A role do banco precisa de leitura/escrita nas tabelas
+e acesso à sequência da coluna identity. Não publique a URL com credenciais.
+
+`persistence/vector_repository.py` salva o texto normalizado, hash SHA-256, origem,
+versão, sequencer e chunks com vetores e configuração do modelo. Uma transação
+por documento bloqueia seu registro, substitui os chunks e atualiza os metadados.
+Falhas durante a escrita revertem a transação. Documentos anteriores do mesmo
+lote podem já ter sido confirmados se outro documento falhar.
+
+Eventos com sequencer igual ou menor são ignorados na persistência; eventos sem
+sequencer não sobrescrevem um documento que já tenha sequência registrada.
+Eventos sem sequencer entre si apenas substituem o registro. A comparação ocorre
+após os embeddings, portanto reentregas ainda podem consumir API. Exclusões S3
+não removem documentos nesta implementação.
+
+O handler retorna `documents_saved` e `documents_skipped`, além das contagens das
+etapas anteriores. Os testes usam conexões simuladas: não comprovam execução do
+SQL, rollback ou concorrência em um PostgreSQL real. A validação real está pendente.
 
 ## Desenvolvimento local
 
@@ -233,7 +261,7 @@ python -m pip install -r requirements.txt
 ```
 
 O `requirements.txt` inclui boto3 para acesso ao S3 e pytest para testes, além
-das dependências transitivas. O SDK `openai` também está incluído. Ainda não há cliente do banco.
+das dependências transitivas. O SDK `openai` também está incluído. A conexão PostgreSQL usa `psycopg`; os vetores usam `pgvector`.
 O `Makefile` está reservado para testes e outras tarefas futuras; não possui
 comandos implementados.
 
@@ -376,7 +404,7 @@ antes de publicá-los.
 1. Verificar a configuração de aprovação no environment dev e aplicar a base quando seus recursos mudarem.
 2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
-4. Validar os embeddings na AWS e implementar persistência no PostgreSQL + pgvector.
+4. Executar o SQL inicial e validar a escrita real e o fluxo completo na AWS.
 5. Validar atualização/exclusão de documentos e processamento idempotente.
 6. Implementar consulta, Function URL e integração com o portfólio.
 7. Avaliar retrieval separadamente da geração.

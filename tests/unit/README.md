@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 28 casos de parsing, ingestão, normalização, chunking e embeddings foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 33 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -81,4 +81,16 @@ Nenhuma chave ou chamada paga é necessária para executar pytest.
 
 ```bash
 python -m pytest tests/unit/embeddings/test_embedding_service.py -v
+```
+
+## Persistência
+
+`persistence/test_vector_repository.py` verifica a sequência de escrita na
+transação, o bloqueio do registro, a rejeição de origem incorreta, o descarte de
+eventos repetidos/antigos e a propagação de falhas ao contexto transacional.
+A conexão é simulada; esses testes não substituem uma validação no PostgreSQL
+real do SQL, rollback e concorrência.
+
+```bash
+python -m pytest tests/unit/persistence/test_vector_repository.py -v
 ```

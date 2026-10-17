@@ -1,6 +1,8 @@
 """Essential ingestion tests without AWS calls."""
 
 from io import BytesIO
+from copy import deepcopy
+from unittest.mock import MagicMock
 from unittest.mock import Mock
 
 import pytest
@@ -83,10 +85,21 @@ def test_handler_loads_each_document(monkeypatch):
     embedder = Mock(side_effect=lambda client, chunks: chunks)
     monkeypatch.setattr("interfaces.lambda_handlers.indexing.embed_chunks", embedder)
 
-    result = lambda_handler({"Records": [record, record]}, None)
+    connection = MagicMock()
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    monkeypatch.setattr("interfaces.lambda_handlers.indexing.psycopg.connect", connection)
+    repository = Mock(return_value=True)
+    monkeypatch.setattr("interfaces.lambda_handlers.indexing.save_document", repository)
+    second_record = deepcopy(record)
+    second_record["s3"]["object"]["key"] = "documents/second.md"
+
+    result = lambda_handler({"Records": [record, second_record]}, None)
 
     assert preprocessor.call_count == 2
     assert result["documents_loaded"] == 2
+    assert result["documents_saved"] == 2
+    assert repository.call_count == 2
+    assert len(repository.call_args_list[0].args[2]) == 1
     assert result["chunks_created"] == 2
     assert result["embeddings_generated"] == 2
     assert len(embedder.call_args.args[1]) == 2
