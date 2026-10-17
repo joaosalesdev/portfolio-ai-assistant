@@ -15,8 +15,8 @@ a operação validada corresponde às funções mínimas no ambiente dev, sem ch
 integrado ou respostas geradas por IA.
 
 No código local, a primeira etapa de indexing já está implementada: validação
-e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. Os 16
-testes pytest de parsing, ingestão e normalização passaram localmente. O deploy
+e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. O chunking também está implementado. Os 21
+testes pytest de parsing, ingestão, normalização e chunking passaram localmente. O deploy
 dessa nova etapa ainda não foi confirmado.
 
 ## Problema e objetivo
@@ -98,7 +98,7 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | Lambdas | Duas funções implantadas na AWS e testadas com mensagens fixas; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3 e carrega documentos; retrieval retorna mensagem fixa; não executam RAG |
+| Handlers | Indexing valida eventos S3, carrega, normaliza e divide documentos; retrieval retorna mensagem fixa; não executam RAG |
 | Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
 | Dockerfiles | Imagens Python 3.14 com handlers mínimos; invocação validada localmente e nas Lambdas implantadas na AWS |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
@@ -107,7 +107,7 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, leitura do objeto implementada e testada com cliente simulado |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings, retrieval, geração e persistência | Módulos reservados |
-| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 16 casos pytest de interpretação do evento S3, ingestão e normalização |
+| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 21 casos pytest de interpretação do evento S3, ingestão, normalização e chunking |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -163,7 +163,7 @@ O handler chama `interfaces/s3_event_parser.py`, que:
 - Rejeita eventos inválidos com `ValueError`, registrado e propagado pelo handler.
 
 O retorno contém `statusCode`, uma mensagem em inglês, a lista `objects` e
-a contagem `documents_loaded`.
+as contagens `documents_loaded` e `chunks_created`.
 O handler chama `ingestion/loader.py` para cada objeto. O loader aceita `.md`
 e `.txt`, solicita o objeto por bucket e chave, usa `VersionId` quando presente,
 decodifica o conteúdo em UTF-8 e fecha o corpo da resposta. Documentos vazios,
@@ -171,15 +171,33 @@ formatos não suportados e conteúdo inválido causam erro. Falhas de leitura s�
 registradas pelo handler e propagadas, sem retornar sucesso falso.
 
 O loader retorna texto e identificação da fonte para as próximas etapas. O handler
-retorna apenas os objetos e `documents_loaded`, sem expor o conteúdo. O handler normaliza o texto com `ingestion/preprocessor.py`: padroniza quebras
+retorna apenas os objetos, `documents_loaded` e `chunks_created`, sem expor o conteúdo. O handler normaliza o texto com `ingestion/preprocessor.py`: padroniza quebras
 de linha, remove espaços finais sem significado e reduz linhas vazias excessivas
 fora de blocos de código. Preserva indentação, blocos de código e quebras de linha
-Markdown com dois espaços. Ainda não há chunking, embeddings, persistência ou mecanismo de aprovação de
+Markdown com dois espaços. Ainda não há embeddings, persistência ou mecanismo de aprovação de
 conteúdo. O parser pertence a `interfaces/`; a leitura pertence a `ingestion/`.
 
 Os rascunhos pessoais de implementação estão em
 [docs/rascunho-indexing.txt](docs/rascunho-indexing.txt) e
 [docs/rascunho-retrieval.txt](docs/rascunho-retrieval.txt).
+
+### Chunking inicial
+
+`ingestion/chunker.py` recebe o documento normalizado e retorna chunks com limite
+configurável por `max_chars` (padrão: 1.000 caracteres). Prioriza quebras entre
+parágrafos, depois espaços em branco; quando necessário, corta no limite.
+O handler usa o valor padrão. A estratégia inicial não utiliza sobreposição.
+
+Cada chunk preserva os metadados de origem e acrescenta `chunk_index` (a partir
+de zero), `start_char` e `end_char` (exclusivo), relativos ao texto normalizado.
+A concatenação dos chunks reproduz o texto integralmente. Texto vazio ou composto
+apenas por espaços em branco retorna uma lista vazia; limites inválidos geram erro.
+
+O tamanho é medido em caracteres, não tokens. Títulos e blocos de código podem
+ser separados quando ultrapassam o limite; identificação de seções e ajustes de
+sobreposição ficam para avaliação posterior. Os chunks permanecem em memória,
+sem geração de embeddings ou persistência nesta etapa. Logs registram contagens,
+sem imprimir o conteúdo completo dos documentos.
 
 ## Desenvolvimento local
 
@@ -335,7 +353,7 @@ antes de publicá-los.
 1. Verificar a configuração de aprovação no environment dev e aplicar a base quando seus recursos mudarem.
 2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
-4. Validar o preprocessing na AWS e implementar chunking, embeddings e persistência.
+4. Validar o chunking na AWS e implementar embeddings e persistência.
 5. Validar atualização/exclusão de documentos e processamento idempotente.
 6. Implementar consulta, Function URL e integração com o portfólio.
 7. Avaliar retrieval separadamente da geração.

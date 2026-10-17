@@ -1,9 +1,10 @@
-"""Indexing entry point: validate S3 events, load and normalize documents."""
+"""Indexing entry point: validate S3 events, load, normalize and chunk documents."""
 
 import logging
 
 import boto3
 
+from ingestion.chunker import chunk_document
 from ingestion.loader import load_document
 from ingestion.preprocessor import preprocess_text
 
@@ -23,20 +24,20 @@ def lambda_handler(event, context):
     s3_client = boto3.client("s3")
     try:
         documents = [load_document(s3_client, obj) for obj in objects]
+        chunks = []
         for document in documents:
-            print(document["text"])
             document["text"] = preprocess_text(document["text"])
-            print(document["text"])
-            print("-- line --")
+            chunks.extend(chunk_document(document))
     except Exception:
-        logger.exception("Document ingestion or preprocessing failed")
+        logger.exception("Document ingestion, preprocessing or chunking failed")
         raise
 
-    logger.info("Documents loaded and preprocessed: %d", len(documents))
+    logger.info("Documents processed: %d; chunks created: %d", len(documents), len(chunks))
 
     return {
         "statusCode": 200,
-        "body": "Documents loaded and preprocessed; chunking and indexing not implemented yet.",
+        "body": "Documents chunked; embeddings and persistence not implemented yet.",
         "objects": objects,
         "documents_loaded": len(documents),
+        "chunks_created": len(chunks),
     }

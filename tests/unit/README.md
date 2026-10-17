@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 16 casos de parsing, ingestão e normalização foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 21 casos de parsing, ingestão, normalização e chunking foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -59,4 +59,15 @@ confere que o preprocessor é chamado para cada documento.
 
 ```bash
 python -m pytest tests/unit/ingestion/test_preprocessor.py -v
+```
+
+## Chunking
+
+`ingestion/test_chunker.py` contém cinco testes: documento curto com metadados,
+preferência por parágrafos, divisão de parágrafos longos sem perda de texto e com
+posições corretas, texto vazio e limite inválido. O teste do handler também verifica
+que o chunker é chamado para cada documento e que a contagem é retornada.
+
+```bash
+python -m pytest tests/unit/ingestion/test_chunker.py -v
 ```

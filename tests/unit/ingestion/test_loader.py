@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 from botocore.exceptions import ClientError
 
+from ingestion.chunker import chunk_document
 from ingestion.loader import load_document
 from ingestion.preprocessor import preprocess_text
 from interfaces.lambda_handlers.indexing import lambda_handler
@@ -72,10 +73,16 @@ def test_handler_loads_each_document(monkeypatch):
     preprocessor = Mock(wraps=preprocess_text)
     monkeypatch.setattr("interfaces.lambda_handlers.indexing.preprocess_text", preprocessor)
 
+    chunker = Mock(wraps=chunk_document)
+    monkeypatch.setattr("interfaces.lambda_handlers.indexing.chunk_document", chunker)
+
     result = lambda_handler({"Records": [record, record]}, None)
 
     assert preprocessor.call_count == 2
     assert result["documents_loaded"] == 2
+    assert result["chunks_created"] == 2
+    assert chunker.call_count == 2
+    assert chunker.call_args_list[0].args[0]["text"] == "First"
     assert client.get_object.call_count == 2
     assert "text" not in result["objects"][0]
 
