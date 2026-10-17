@@ -8,6 +8,8 @@ mock_provider "aws" {
 }
 
 variables {
+  openai_api_key = "test-key-not-real"
+  database_url   = "postgresql://test:test@localhost/test"
   indexing_image_uri  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/indexing@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   retrieval_image_uri = "123456789012.dkr.ecr.us-east-1.amazonaws.com/retrieval@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 }
@@ -53,4 +55,35 @@ run "reject_empty_prefix" {
     documents_prefix = ""
   }
   expect_failures = [var.documents_prefix]
+}
+
+run "lambda_environment" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for function in [aws_lambda_function.indexing, aws_lambda_function.retrieval] :
+      function.environment[0].variables == tomap({
+        OPENAI_API_KEY = var.openai_api_key
+        DATABASE_URL   = var.database_url
+      })
+    ])
+    error_message = "Both Lambdas must receive only the two application environment variables."
+  }
+}
+
+run "reject_empty_api_key" {
+  command = plan
+  variables {
+    openai_api_key = ""
+  }
+  expect_failures = [var.openai_api_key]
+}
+
+run "reject_empty_database_url" {
+  command = plan
+  variables {
+    database_url = ""
+  }
+  expect_failures = [var.database_url]
 }

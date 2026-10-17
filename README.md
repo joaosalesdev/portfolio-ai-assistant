@@ -110,7 +110,7 @@ respostas ainda será escolhido.
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; testes simulados, validação real pendente |
 | Retrieval e geração | Módulos reservados |
-| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 33 casos pytest de parsing, ingestão, chunking e embeddings |
+| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 33 casos pytest de parsing, ingestão, chunking e embeddings |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -215,8 +215,8 @@ contagem `embeddings_generated`, sem expor vetores ou texto. Os vetores são env
 
 A variável `OPENAI_API_KEY` deve estar disponível no processo; `.env` não é
 carregado automaticamente. A execução local agora chama a API e pode gerar custos.
-Na AWS, a chave deve estar disponível separadamente para a Lambda; este código
-não configura a entrega do secret. Não inserir a chave no código ou no Git.
+Na AWS, o Terraform configura a chave nas Lambdas usando o secret de repositório
+`OPENAI_API_KEY` recebido pelo workflow. Não inserir a chave no código ou no Git.
 O timeout de indexing no Terraform foi elevado para 120 segundos; lotes de
 muitos documentos ainda podem exceder esse limite. Não há orçamento global de
 execução nesta versão inicial.
@@ -230,7 +230,8 @@ e `portfolio_chunks` com `vector(1536)`. Ele não é executado automaticamente p
 handler. Para tabelas já existentes, revise sua compatibilidade; `IF NOT EXISTS`
 não atualiza esquemas antigos.
 
-Configure `DATABASE_URL` no processo (e separadamente na Lambda), com os parâmetros
+Configure `DATABASE_URL` no processo e como secret do repositório para o deploy
+via Terraform, com os parâmetros
 TLS exigidos pelo provedor. A role do banco precisa de leitura/escrita nas tabelas
 e acesso à sequência da coluna identity. Não publique a URL com credenciais.
 
@@ -249,6 +250,27 @@ não removem documentos nesta implementação.
 O handler retorna `documents_saved` e `documents_skipped`, além das contagens das
 etapas anteriores. Os testes usam conexões simuladas: não comprovam execução do
 SQL, rollback ou concorrência em um PostgreSQL real. A validação real está pendente.
+
+### Variáveis de ambiente
+
+A aplicação precisa apenas de `OPENAI_API_KEY` e `DATABASE_URL`. Ambas são
+configuradas pelo Terraform nas Lambdas; o retrieval atual ainda é um handler
+mínimo e passará a usá-las quando sua implementação for concluída.
+
+`DOCUMENTS_BUCKET` não é necessário: bucket e chave vêm do evento S3.
+`INDEXING_FUNCTION_NAME` e `RETRIEVAL_FUNCTION_NAME` não são consumidos pelo código.
+`AWS_REGION` é fornecido pelo ambiente Lambda; localmente, configure a região
+no seu perfil AWS ou no ambiente, se necessário. Não tente sobrescrever a variável
+reservada `AWS_REGION` no bloco environment da Lambda.
+
+O `.env.example` contém somente as duas variáveis da aplicação. Ele é uma
+referência e não carrega automaticamente um `.env`. O Terraform recebe os valores
+por `TF_VAR_openai_api_key` e `TF_VAR_database_url`; o workflow usa GitHub Actions
+Repository Secrets com nomes `OPENAI_API_KEY` e `DATABASE_URL`.
+Veja [a configuração do deploy](docs/deployment.md).
+
+Os valores são marcados como sensíveis, mas permanecem no estado Terraform e no
+plano binário armazenado como artifact. Esses arquivos devem ter acesso restrito.
 
 ## Desenvolvimento local
 

@@ -30,3 +30,25 @@ variable "retrieval_image_uri" {
   description = "URI da imagem de retrieval com digest."
   type        = string
 }
+
+variable "openai_api_key" {
+  description = "OpenAI API key supplied externally; never commit the value."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.openai_api_key)) > 0
+    error_message = "openai_api_key must not be empty."
+  }
+}
+
+variable "database_url" {
+  description = "PostgreSQL connection URL supplied externally; never commit the value."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.database_url)) > 0
+    error_message = "database_url must not be empty."
+  }
+}

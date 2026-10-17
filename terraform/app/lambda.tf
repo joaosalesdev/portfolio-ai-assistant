@@ -1,5 +1,4 @@
-# A implementar: duas Lambdas com imagens já publicadas no ECR.
-# Indexing administrativa, sem URL pública; retrieval com Function URL.
+# Container-based Lambdas. Retrieval Function URL is not implemented yet.
 
 # Indexing Lambda
 resource "aws_lambda_function" "indexing" {
@@ -10,6 +9,13 @@ resource "aws_lambda_function" "indexing" {
   package_type  = "Image"
   image_uri     = var.indexing_image_uri
   architectures = ["x86_64"]
+
+  environment {
+    variables = {
+      OPENAI_API_KEY = var.openai_api_key
+      DATABASE_URL   = var.database_url
+    }
+  }
 
   depends_on = [
     aws_cloudwatch_log_group.indexing,
@@ -28,6 +34,13 @@ resource "aws_lambda_function" "retrieval" {
   package_type  = "Image"
   image_uri     = var.retrieval_image_uri
   architectures = ["x86_64"]
+
+  environment {
+    variables = {
+      OPENAI_API_KEY = var.openai_api_key
+      DATABASE_URL   = var.database_url
+    }
+  }
 
   depends_on = [
     aws_cloudwatch_log_group.retrieval,

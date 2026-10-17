@@ -34,7 +34,38 @@ Terraform base continua sendo aplicado localmente quando seus recursos mudam.
 3. Faça commit dos arquivos e push na main. O workflow também pode ser iniciado
    por **Actions → Deploy Lambda containers → Run workflow**, selecionando main.
 
-Não é necessário cadastrar access keys. O ARN da role, a região, a conta AWS e
+Cadastre em **Settings → Secrets and variables → Actions → Repository secrets**:
+
+- `OPENAI_API_KEY`
+- `DATABASE_URL`
+
+O job `plan` não utiliza o environment `dev`, portanto secrets cadastrados apenas
+nesse environment não ficam disponíveis para ele. O workflow verifica a presença
+dos dois secrets antes do build e passa seus valores para `TF_VAR_openai_api_key`
+e `TF_VAR_database_url` somente na etapa de plan. O apply utiliza o plano salvo,
+sem precisar receber os valores novamente. Não cadastre esses valores como Variables
+públicas e não os inclua no YAML ou em arquivos versionados.
+
+O Terraform configura ambas as Lambdas com `OPENAI_API_KEY` e `DATABASE_URL`.
+O indexing já as utiliza; retrieval recebe a configuração para implementação futura.
+O `.env` local não é lido pelo Terraform nem pelo GitHub Actions.
+
+Para plan local, com as variáveis da aplicação já exportadas no terminal:
+
+```bash
+export TF_VAR_openai_api_key="$OPENAI_API_KEY"
+export TF_VAR_database_url="$DATABASE_URL"
+terraform -chdir=terraform/app plan
+```
+
+As variáveis são `sensitive`, o que oculta os valores na saída usual do Terraform.
+Porém os valores permanecem no estado e no plano binário salvo, inclusive no
+artifact de plan usado pelo workflow. Restrinja acesso ao backend e aos artifacts;
+o artifact atual tem retenção de um dia. Esta implementação usa env vars diretas,
+sem integrar Secrets Manager. Uma futura integração pode evitar incluir os valores
+no estado Terraform.
+
+Não é necessário cadastrar access keys AWS. O ARN da role, a região, a conta AWS e
 os nomes dos repositórios estão explícitos no workflow e não são secrets.
 
 ## Etapas

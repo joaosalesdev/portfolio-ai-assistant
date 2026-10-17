@@ -50,6 +50,15 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Run unit tests
         run: python -m pytest -v
+      - name: Check deployment secrets
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [[ -z "$OPENAI_API_KEY" || -z "$DATABASE_URL" ]]; then
+            echo "Set repository Actions secrets OPENAI_API_KEY and DATABASE_URL." >&2
+            exit 1
+          fi
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
@@ -104,6 +113,9 @@ jobs:
             echo "TF_VAR_${component}_image_uri=$ECR_REGISTRY/$repository@$digest" >> "$GITHUB_ENV"
           done
       - name: Create deployment plan
+        env:
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
         run: |
           terraform -chdir=terraform/app init -reconfigure
           terraform -chdir=terraform/app plan -lock-timeout=5m -out=deploy.tfplan

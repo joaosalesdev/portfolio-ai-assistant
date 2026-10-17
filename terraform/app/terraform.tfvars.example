@@ -4,3 +4,8 @@ project_name = "portfolio-ai-assistant"
 
 # Apenas uploads neste prefixo disparam indexing.
 # documents_prefix = "documents/"
+
+# Supply secrets via environment variables, not this file:
+# TF_VAR_openai_api_key
+# TF_VAR_database_url
+# Local OPENAI_API_KEY / DATABASE_URL are not read automatically by Terraform.
