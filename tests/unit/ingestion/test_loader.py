@@ -76,11 +76,20 @@ def test_handler_loads_each_document(monkeypatch):
     chunker = Mock(wraps=chunk_document)
     monkeypatch.setattr("interfaces.lambda_handlers.indexing.chunk_document", chunker)
 
+    openai_client = Mock()
+    openai_client.__enter__ = Mock(return_value=openai_client)
+    openai_client.__exit__ = Mock(return_value=False)
+    monkeypatch.setattr("interfaces.lambda_handlers.indexing.OpenAI", Mock(return_value=openai_client))
+    embedder = Mock(side_effect=lambda client, chunks: chunks)
+    monkeypatch.setattr("interfaces.lambda_handlers.indexing.embed_chunks", embedder)
+
     result = lambda_handler({"Records": [record, record]}, None)
 
     assert preprocessor.call_count == 2
     assert result["documents_loaded"] == 2
     assert result["chunks_created"] == 2
+    assert result["embeddings_generated"] == 2
+    assert len(embedder.call_args.args[1]) == 2
     assert chunker.call_count == 2
     assert chunker.call_args_list[0].args[0]["text"] == "First"
     assert client.get_object.call_count == 2

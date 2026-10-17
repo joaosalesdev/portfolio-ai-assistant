@@ -4,6 +4,7 @@
 # Indexing Lambda
 resource "aws_lambda_function" "indexing" {
   function_name = local.indexing_function_name
+  timeout       = 120
   role          = aws_iam_role.indexing_lambda.arn
 
   package_type  = "Image"

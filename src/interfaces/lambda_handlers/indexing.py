@@ -1,8 +1,11 @@
-"""Indexing entry point: validate S3 events, load, normalize and chunk documents."""
+"""Indexing entry point: validate S3 events, prepare documents and generate embeddings."""
 
 import logging
 
 import boto3
+from openai import OpenAI
+
+from embeddings.embedding_service import embed_chunks
 
 from ingestion.chunker import chunk_document
 from ingestion.loader import load_document
@@ -32,12 +35,23 @@ def lambda_handler(event, context):
         logger.exception("Document ingestion, preprocessing or chunking failed")
         raise
 
+    try:
+        embedded_chunks = []
+        if chunks:
+            with OpenAI(timeout=20.0, max_retries=2) as client:
+                embedded_chunks = embed_chunks(client, chunks)
+    except Exception:
+        logger.exception("Embedding generation failed")
+        raise
+
+    logger.info("Embeddings generated: %d", len(embedded_chunks))
     logger.info("Documents processed: %d; chunks created: %d", len(documents), len(chunks))
 
     return {
         "statusCode": 200,
-        "body": "Documents chunked; embeddings and persistence not implemented yet.",
+        "body": "Embeddings generated; persistence not implemented yet.",
         "objects": objects,
         "documents_loaded": len(documents),
         "chunks_created": len(chunks),
+        "embeddings_generated": len(embedded_chunks),
     }

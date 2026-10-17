@@ -15,8 +15,8 @@ a operação validada corresponde às funções mínimas no ambiente dev, sem ch
 integrado ou respostas geradas por IA.
 
 No código local, a primeira etapa de indexing já está implementada: validação
-e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. O chunking também está implementado. Os 21
-testes pytest de parsing, ingestão, normalização e chunking passaram localmente. O deploy
+e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. O chunking também está implementado. A geração de embeddings também está implementada. Os 28
+testes pytest passaram localmente, com clientes externos simulados. O deploy
 dessa nova etapa ainda não foi confirmado.
 
 ## Problema e objetivo
@@ -88,7 +88,8 @@ Similaridade não será interpretada como garantia de verdade.
 - CloudWatch para logs e métricas.
 - GitHub Actions implementado para validação, build, publicação e deploy.
 
-Provedores/modelos de embeddings e geração ainda serão escolhidos.
+Embeddings utilizam OpenAI `text-embedding-3-small`. O modelo de geração das
+respostas ainda será escolhido.
 
 ## Estado atual do repositório
 
@@ -98,7 +99,7 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | Lambdas | Duas funções implantadas na AWS e testadas com mensagens fixas; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3, carrega, normaliza e divide documentos; retrieval retorna mensagem fixa; não executam RAG |
+| Handlers | Indexing valida eventos S3, prepara documentos e gera embeddings; retrieval retorna mensagem fixa; não executam RAG |
 | Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
 | Dockerfiles | Imagens Python 3.14 com handlers mínimos; invocação validada localmente e nas Lambdas implantadas na AWS |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
@@ -106,8 +107,9 @@ Provedores/modelos de embeddings e geração ainda serão escolhidos.
 | GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply implementado; deploy funcionando na AWS; configuração de required reviewers não documentada como validada |
 | S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, leitura do objeto implementada e testada com cliente simulado |
 | Function URL | Ainda não definida no Terraform |
-| Embeddings, retrieval, geração e persistência | Módulos reservados |
-| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 21 casos pytest de interpretação do evento S3, ingestão, normalização e chunking |
+| Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
+| Retrieval, geração e persistência | Módulos reservados |
+| Testes | Quatro testes Terraform com AWS simulado para bucket e integração S3, além do teste de invocação dos containers; 28 casos pytest de parsing, ingestão, chunking e embeddings |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -174,7 +176,7 @@ O loader retorna texto e identificação da fonte para as próximas etapas. O ha
 retorna apenas os objetos, `documents_loaded` e `chunks_created`, sem expor o conteúdo. O handler normaliza o texto com `ingestion/preprocessor.py`: padroniza quebras
 de linha, remove espaços finais sem significado e reduz linhas vazias excessivas
 fora de blocos de código. Preserva indentação, blocos de código e quebras de linha
-Markdown com dois espaços. Ainda não há embeddings, persistência ou mecanismo de aprovação de
+Markdown com dois espaços. Ainda não há persistência ou mecanismo de aprovação de
 conteúdo. O parser pertence a `interfaces/`; a leitura pertence a `ingestion/`.
 
 Os rascunhos pessoais de implementação estão em
@@ -196,8 +198,29 @@ apenas por espaços em branco retorna uma lista vazia; limites inválidos geram 
 O tamanho é medido em caracteres, não tokens. Títulos e blocos de código podem
 ser separados quando ultrapassam o limite; identificação de seções e ajustes de
 sobreposição ficam para avaliação posterior. Os chunks permanecem em memória,
-sem geração de embeddings ou persistência nesta etapa. Logs registram contagens,
+com embeddings gerados na etapa seguinte, ainda sem persistência. Logs registram contagens,
 sem imprimir o conteúdo completo dos documentos.
+
+### Embeddings
+
+`embeddings/embedding_service.py` gera vetores com `text-embedding-3-small` e
+1.536 dimensões explícitas, em lotes de até 32 chunks. Valida a quantidade,
+os índices e a dimensão das respostas antes de associar cada vetor à sua fonte.
+O resultado preserva texto e metadados, acrescentando `embedding`,
+`embedding_model` e `embedding_dimensions`.
+
+O handler usa o SDK OpenAI com timeout de 20 segundos por tentativa e até duas
+retentativas. Falhas são registradas e propagadas. O retorno inclui apenas a
+contagem `embeddings_generated`, sem expor vetores ou texto. Os vetores ainda
+ficam em memória e não são salvos. Reexecutar um evento repete as chamadas pagas.
+
+A variável `OPENAI_API_KEY` deve estar disponível no processo; `.env` não é
+carregado automaticamente. A execução local agora chama a API e pode gerar custos.
+Na AWS, a chave deve estar disponível separadamente para a Lambda; este código
+não configura a entrega do secret. Não inserir a chave no código ou no Git.
+O timeout de indexing no Terraform foi elevado para 120 segundos; lotes de
+muitos documentos ainda podem exceder esse limite. Não há orçamento global de
+execução nesta versão inicial.
 
 ## Desenvolvimento local
 
@@ -210,7 +233,7 @@ python -m pip install -r requirements.txt
 ```
 
 O `requirements.txt` inclui boto3 para acesso ao S3 e pytest para testes, além
-das dependências transitivas. Ainda não há clientes de modelos ou banco.
+das dependências transitivas. O SDK `openai` também está incluído. Ainda não há cliente do banco.
 O `Makefile` está reservado para testes e outras tarefas futuras; não possui
 comandos implementados.
 
@@ -353,7 +376,7 @@ antes de publicá-los.
 1. Verificar a configuração de aprovação no environment dev e aplicar a base quando seus recursos mudarem.
 2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
 3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
-4. Validar o chunking na AWS e implementar embeddings e persistência.
+4. Validar os embeddings na AWS e implementar persistência no PostgreSQL + pgvector.
 5. Validar atualização/exclusão de documentos e processamento idempotente.
 6. Implementar consulta, Function URL e integração com o portfólio.
 7. Avaliar retrieval separadamente da geração.

@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 21 casos de parsing, ingestão, normalização e chunking foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 28 casos de parsing, ingestão, normalização, chunking e embeddings foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -70,4 +70,15 @@ que o chunker é chamado para cada documento e que a contagem é retornada.
 
 ```bash
 python -m pytest tests/unit/ingestion/test_chunker.py -v
+```
+
+## Embeddings
+
+`embeddings/test_embedding_service.py` usa um cliente OpenAI simulado para verificar
+metadados, ordenação dos vetores, divisão em lotes, entrada vazia, respostas inválidas
+e propagação de falhas. O teste do handler simula a etapa de embeddings.
+Nenhuma chave ou chamada paga é necessária para executar pytest.
+
+```bash
+python -m pytest tests/unit/embeddings/test_embedding_service.py -v
 ```
