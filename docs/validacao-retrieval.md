@@ -1,7 +1,8 @@
 # Validação inicial do retrieval
 
 O objetivo desta etapa é conferir se a busca recupera evidências úteis. Ainda não
-há geração de respostas, filtro de relevância mínima ou seleção final de contexto.
+há geração de respostas nem filtro de relevância mínima. O contexto já é selecionado
+com limite de tamanho e identificadores de fontes.
 Os testes automatizados simulam OpenAI e PostgreSQL; a validação abaixo usa os
 serviços reais e não foi executada pelo agente.
 
@@ -93,3 +94,18 @@ aproximado criado por esta etapa. Não cria tabelas nem grava dados. O handler
 retorna trechos da base para inspeção, sem gerar resposta final. Revisar a seleção
 de conteúdo público antes de disponibilizar um endpoint. A Function URL ainda não
 é criada no Terraform.
+
+## Conferir o contexto selecionado
+
+Na resposta de `python scripts/invoke_retrieval.py`, comparar `matches` com
+`sources` e `context`. Cada rótulo `[S1]`, `[S2]` etc. deve corresponder ao `id`
+da fonte, com texto e metadados do chunk correto. Os identificadores são locais
+a cada requisição, não IDs permanentes de documentos.
+
+Verificar que `context` não ultrapassa 6.000 caracteres. Fontes vazias, duplicadas
+ou grandes demais para o orçamento podem ser descartadas. `sources_count` pode
+ser menor que `matches_count`; isso é esperado. `has_context: false` significa
+que nenhum trecho foi selecionado, e `true` não comprova relevância para a pergunta.
+
+Não há nova chamada paga ou consulta adicional na seleção: ela usa os resultados
+já recuperados. O comando completo continua chamando embeddings e PostgreSQL.

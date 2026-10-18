@@ -1,4 +1,4 @@
-"""Validate, normalize and embed questions and retrieve chunks; generation is not implemented yet."""
+"""Validate, normalize and embed questions and prepare retrieval context; generation is not implemented yet."""
 
 import json
 import logging
@@ -11,6 +11,7 @@ from openai import OpenAI
 from embeddings.embedding_service import DIMENSIONS, MODEL, embed_query
 
 from interfaces.question_parser import RequestValidationError, parse_question
+from retrieval.context_selector import select_context
 from retrieval.query_preprocessor import preprocess_query
 from retrieval.retriever import retrieve_chunks
 
@@ -56,17 +57,24 @@ def lambda_handler(event, context):
             "body": json.dumps({"error": "Unable to search the document base."}),
         }
 
+    selected = select_context(matches)
+    logger.info("Context sources selected: %d; characters: %d",
+                len(selected["sources"]), len(selected["context"]))
     logger.info("Chunks retrieved: %d", len(matches))
     logger.info("Query embedding generated: %d dimensions", len(vector))
     return {
         "statusCode": 200,
         "headers": headers,
         "body": json.dumps({
-            "message": "Chunks retrieved; response generation not implemented yet.",
+            "message": "Context prepared; response generation not implemented yet.",
             "question": question,
             "embedding_model": MODEL,
             "embedding_dimensions": DIMENSIONS,
             "matches": matches,
             "matches_count": len(matches),
+            "context": selected["context"],
+            "sources": selected["sources"],
+            "sources_count": len(selected["sources"]),
+            "has_context": bool(selected["sources"]),
         }, ensure_ascii=False),
     }

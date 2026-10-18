@@ -46,6 +46,8 @@ def test_valid_question(event, openai_client):
     body = json.loads(response["body"])
     assert body["embedding_dimensions"] == 1536
     assert "embedding" not in body
+    assert body["context"] == ""
+    assert body["has_context"] is False
     client = openai_client.return_value.__enter__.return_value
     assert client.embeddings.create.call_args.kwargs["input"] == ["Quais oportunidades João procura?"]
     assert response["headers"]["Content-Type"] == "application/json"
@@ -108,6 +110,10 @@ def test_search_results(event, database):
     body = json.loads(response["body"])
     assert response["statusCode"] == 200
     assert body["matches_count"] == 1
+    assert body["context"] == "[S1]\nBackend e Cloud"
+    assert body["sources"][0]["id"] == "S1"
+    assert body["sources_count"] == 1
+    assert body["has_context"] is True
     assert body["matches"][0]["source"] == "documents/career_goals.md"
     assert len(retriever.call_args.args[1]) == 1536
 

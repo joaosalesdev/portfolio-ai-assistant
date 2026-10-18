@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 59 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 64 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -129,7 +129,7 @@ criam o cliente OpenAI. A suíte não faz chamadas pagas.
 `retrieval/test_retriever.py` verifica a consulta parametrizada por cosseno, os
 filtros de modelo/dimensão, Top-K, resultados vazios e rejeição de vetores inválidos.
 Os testes do handler simulam PostgreSQL, verificam o retorno dos matches e o erro
-HTTP 503 sem detalhes internos. Os 59 casos da suíte passam sem serviços externos.
+HTTP 503 sem detalhes internos. Os 64 casos da suíte passam sem serviços externos.
 
 ```bash
 python -m pytest tests/unit/retrieval -v
@@ -137,3 +137,14 @@ python -m pytest tests/unit/retrieval -v
 
 A relevância semântica e a execução SQL real precisam de validação separada:
 [guia de validação](../../docs/validacao-retrieval.md).
+
+## Seleção de contexto
+
+`retrieval/test_context_selector.py` contém cinco testes: ordem e metadados das
+fontes, orçamento com rótulos/separadores, descarte de chunks grandes sem corte,
+textos vazios/duplicados e limite inválido. Os testes do handler conferem contexto
+vazio e associação entre o identificador S1 e a fonte retornada.
+
+```bash
+python -m pytest tests/unit/retrieval/test_context_selector.py -v
+```

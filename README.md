@@ -8,13 +8,13 @@ evidência suficiente.
 **Em desenvolvimento.** O fluxo de indexação está implementado: valida eventos
 S3, lê documentos, normaliza o texto, cria chunks, gera embeddings OpenAI e
 persiste os dados no PostgreSQL + pgvector. O mantenedor confirmou a leitura real
-do S3 e apresentou registros com embeddings no banco. Consulta, geração de
-respostas e integração do chat ainda serão implementadas.
+do S3 e apresentou registros com embeddings no banco. A consulta já recupera chunks e prepara o contexto; geração de respostas e
+integração do chat ainda serão implementadas.
 
 O mantenedor confirmou em 18/10/2026 o indexing completo na AWS, com as
 variáveis de ambiente recebidas de GitHub Actions Secrets via Terraform. Uploads
 e atualizações foram testados: documentos não duplicam e seus chunks são
-substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 59 testes pytest e seis testes Terraform de app
+substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 64 testes pytest e seis testes Terraform de app
 com serviços simulados; base contém mais um teste Terraform.
 
 ## Problema e objetivo
@@ -108,8 +108,8 @@ respostas ainda será escolhido.
 | Function URL | Ainda não definida no Terraform |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
-| Retrieval e geração | Entrada HTTP, normalização, embedding e busca vetorial implementados; geração ainda pendente |
-| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 59 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
+| Retrieval e geração | Entrada HTTP, normalização, embedding, busca vetorial e seleção de contexto implementados; geração ainda pendente |
+| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 64 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
 | Scripts de invocação | Indexing e retrieval locais com eventos JSON implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -153,7 +153,7 @@ injetados quando necessário para permitir testes sem AWS ou chamadas pagas.
 As imagens usam os handlers `interfaces/lambda_handlers/indexing.py` e
 `interfaces/lambda_handlers/retrieval.py`. Indexing recebe eventos S3; retrieval
 valida a entrada HTTP. O processamento de documentos já está implementado no
-indexing; busca e geração ainda estão pendentes.
+indexing; retrieval já recupera os chunks e prepara o contexto, sem gerar respostas.
 
 ### Entrada, leitura e normalização
 
@@ -259,7 +259,7 @@ antigos ainda não têm validação específica registrada.
 
 A aplicação precisa apenas de `OPENAI_API_KEY` e `DATABASE_URL`. Ambas são
 configuradas pelo Terraform nas Lambdas; o retrieval atual ainda é um handler
-de validação e passará a usá-las quando busca e geração forem implementadas.
+de consulta já utiliza ambas para embeddings e busca vetorial.
 
 `DOCUMENTS_BUCKET` não é necessário: bucket e chave vêm do evento S3.
 `INDEXING_FUNCTION_NAME` e `RETRIEVAL_FUNCTION_NAME` não são consumidos pelo código.
@@ -286,7 +286,7 @@ espaços nas extremidades. O corpo decodificado é limitado a 16 KiB.
 O handler retorna JSON com HTTP 200 após gerar o embedding da pergunta, 400 para
 conteúdo inválido, 405 para método não suportado, 413 para corpo muito grande e
 502 para falha na geração do embedding e 503 para falha de consulta ao banco. A resposta contém a pergunta normalizada,
-o modelo, a dimensão e os chunks recuperados, sem expor o vetor. Ainda não há geração de respostas.
+o modelo, a dimensão, os chunks recuperados e o contexto com fontes, sem expor o vetor. Ainda não há geração de respostas.
 A Function URL e o CORS ainda não estão configurados no Terraform.
 
 Após a validação, `retrieval/query_preprocessor.py` normaliza a pergunta: espaços
@@ -331,6 +331,26 @@ somente de leitura e timeout SQL de 10 segundos, sem gravar dados.
 Veja [como validar o retrieval](docs/validacao-retrieval.md), com perguntas de
 exemplo, evidências esperadas e verificações SQL. Nenhuma migração adicional é
 necessária nesta etapa.
+
+### Seleção de contexto
+
+`retrieval/context_selector.py` organiza os chunks recuperados em blocos `[S1]`,
+`[S2]` etc., preservando a ordem da busca. Remove duplicatas do mesmo chunk e
+ignora textos vazios. O limite padrão é de 6.000 caracteres, incluindo os rótulos
+e separadores, configurável por `max_chars` no código. Chunks que não cabem são
+ignorados inteiros, sem truncar; um trecho posterior menor ainda pode ser incluído.
+
+O retorno acrescenta `context`, `sources`, `sources_count` e `has_context`.
+Cada fonte mantém texto e metadados de origem, distância e um `id` correspondente
+ao rótulo do contexto. Os campos `matches` continuam disponíveis para comparar
+resultados recuperados com os efetivamente selecionados. Os logs mostram apenas
+contagens e tamanho do contexto, sem imprimir o conteúdo.
+
+O orçamento é de caracteres, não tokens. `has_context` indica somente que há
+texto selecionado; não garante evidência suficiente para responder. Os documentos
+continuam sendo dados não confiáveis: os identificadores não impedem prompt
+injection. A geração deverá separar instruções de conteúdo e validar as fontes.
+Ainda não há chamada a modelo de geração nesta etapa.
 
 ## Desenvolvimento local
 
@@ -484,9 +504,9 @@ antes de publicá-los.
 ## Avaliação e próximos passos
 
 1. Selecionar perguntas com evidências esperadas nos documentos indexados.
-2. Validar a busca real com perguntas e evidências esperadas, incluindo exemplos sem resposta.
-3. Avaliar os chunks recuperados antes de conectar a geração de respostas.
-4. Implementar respostas com fontes, Function URL e integração com o portfólio.
+2. Validar busca e contexto com perguntas e evidências esperadas, incluindo exemplos sem resposta.
+3. Implementar geração de respostas usando o contexto selecionado e os identificadores de fontes.
+4. Validar referências das respostas e implementar Function URL e integração com o portfólio.
 5. Complementar a validação de reentrega, evento antigo, concorrência e rollback no banco real.
 6. Definir exclusão de documentos, verificação após deploy e rollback operacional.
 7. Medir qualidade, latência, erros, tokens e custos antes de otimizar.
