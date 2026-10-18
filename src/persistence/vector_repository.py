@@ -55,3 +55,31 @@ def save_document(connection, document, chunks):
                      Vector(chunk["embedding"]).to_text()),
                 )
     return True
+
+
+def search_chunks(connection, vector, model, dimensions, top_k=5):
+    """Return the nearest compatible chunks by cosine distance."""
+    import math
+
+    from psycopg.rows import dict_row
+
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
+        raise ValueError("top_k must be an integer between 1 and 20.")
+    if len(vector) != dimensions or not all(math.isfinite(value) for value in vector):
+        raise ValueError("Invalid query embedding.")
+    if not any(vector):
+        raise ValueError("Query embedding must not be a zero vector.")
+
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(
+            """SELECT c.document_id, c.chunk_index, c.start_char, c.end_char,
+                      c.content AS text, d.object_key AS source, d.version_id,
+                      c.embedding <=> %s::vector AS distance
+               FROM portfolio_chunks AS c
+               JOIN portfolio_documents AS d ON d.id = c.document_id
+               WHERE c.embedding_model = %s AND c.embedding_dimensions = %s
+               ORDER BY distance ASC, c.document_id ASC, c.chunk_index ASC
+               LIMIT %s""",
+            (Vector(vector).to_text(), model, dimensions, top_k),
+        )
+        return cursor.fetchall()

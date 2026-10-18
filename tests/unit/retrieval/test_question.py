@@ -22,6 +22,16 @@ def openai_client(monkeypatch):
     return factory
 
 
+@pytest.fixture(autouse=True)
+def database(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    factory = MagicMock()
+    monkeypatch.setattr("interfaces.lambda_handlers.retrieval.psycopg.connect", factory)
+    retriever = MagicMock(return_value=[])
+    monkeypatch.setattr("interfaces.lambda_handlers.retrieval.retrieve_chunks", retriever)
+    return factory, retriever
+
+
 @pytest.fixture
 def event():
     path = Path(__file__).resolve().parents[2] / "events/retrieval/post_question.json"
@@ -89,3 +99,22 @@ def test_embedding_failure(event, openai_client):
     response = lambda_handler(event, None)
     assert response["statusCode"] == 502
     assert "Private provider details" not in response["body"]
+
+
+def test_search_results(event, database):
+    factory, retriever = database
+    retriever.return_value = [{"source": "documents/career_goals.md", "text": "Backend e Cloud", "distance": 0.2}]
+    response = lambda_handler(event, None)
+    body = json.loads(response["body"])
+    assert response["statusCode"] == 200
+    assert body["matches_count"] == 1
+    assert body["matches"][0]["source"] == "documents/career_goals.md"
+    assert len(retriever.call_args.args[1]) == 1536
+
+
+def test_database_failure(event, database):
+    factory, retriever = database
+    factory.side_effect = RuntimeError("Private database details")
+    response = lambda_handler(event, None)
+    assert response["statusCode"] == 503
+    assert "Private database details" not in response["body"]

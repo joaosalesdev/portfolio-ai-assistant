@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 51 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 59 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -123,3 +123,17 @@ a rejeição de pergunta vazia antes de chamar a API. Os testes do handler usam 
 factory OpenAI simulada, verificam o envio da pergunta normalizada e o retorno
 HTTP 502 sem detalhes internos quando a geração falha. Entradas inválidas não
 criam o cliente OpenAI. A suíte não faz chamadas pagas.
+
+## Busca vetorial
+
+`retrieval/test_retriever.py` verifica a consulta parametrizada por cosseno, os
+filtros de modelo/dimensão, Top-K, resultados vazios e rejeição de vetores inválidos.
+Os testes do handler simulam PostgreSQL, verificam o retorno dos matches e o erro
+HTTP 503 sem detalhes internos. Os 59 casos da suíte passam sem serviços externos.
+
+```bash
+python -m pytest tests/unit/retrieval -v
+```
+
+A relevância semântica e a execução SQL real precisam de validação separada:
+[guia de validação](../../docs/validacao-retrieval.md).

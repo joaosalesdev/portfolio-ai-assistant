@@ -14,7 +14,7 @@ respostas e integração do chat ainda serão implementadas.
 O mantenedor confirmou em 18/10/2026 o indexing completo na AWS, com as
 variáveis de ambiente recebidas de GitHub Actions Secrets via Terraform. Uploads
 e atualizações foram testados: documentos não duplicam e seus chunks são
-substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 51 testes pytest e seis testes Terraform de app
+substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 59 testes pytest e seis testes Terraform de app
 com serviços simulados; base contém mais um teste Terraform.
 
 ## Problema e objetivo
@@ -95,10 +95,10 @@ respostas ainda será escolhido.
 | Componente | Situação no código |
 | --- | --- |
 | Terraform | Separado em base/app, com estados distintos no backend S3 |
-| Lambdas | Indexing validado na AWS até a persistência; retrieval valida, normaliza e gera embeddings das perguntas; imagens Docker por digest e arquitetura x86_64 |
+| Lambdas | Indexing validado na AWS até a persistência; retrieval valida, normaliza, gera embeddings e busca chunks; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval valida, normaliza e gera embeddings das perguntas; o chat RAG ainda não está implementado |
+| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval valida, normaliza, gera embeddings e busca chunks; o chat RAG ainda não está implementado |
 | Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
 | Dockerfiles | Imagens Python 3.14; indexing completo validado na AWS e retrieval com handler mínimo |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
@@ -108,8 +108,8 @@ respostas ainda será escolhido.
 | Function URL | Ainda não definida no Terraform |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
-| Retrieval e geração | Entrada HTTP, normalização e embedding da pergunta implementados; busca vetorial e geração ainda não implementadas |
-| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 51 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
+| Retrieval e geração | Entrada HTTP, normalização, embedding e busca vetorial implementados; geração ainda pendente |
+| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 59 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
 | Scripts de invocação | Indexing e retrieval locais com eventos JSON implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -285,8 +285,8 @@ espaços nas extremidades. O corpo decodificado é limitado a 16 KiB.
 
 O handler retorna JSON com HTTP 200 após gerar o embedding da pergunta, 400 para
 conteúdo inválido, 405 para método não suportado, 413 para corpo muito grande e
-502 para falha na geração do embedding. A resposta contém a pergunta normalizada,
-o modelo e a dimensão, sem expor o vetor. Ainda não há busca ou geração de respostas.
+502 para falha na geração do embedding e 503 para falha de consulta ao banco. A resposta contém a pergunta normalizada,
+o modelo, a dimensão e os chunks recuperados, sem expor o vetor. Ainda não há geração de respostas.
 A Function URL e o CORS ainda não estão configurados no Terraform.
 
 Após a validação, `retrieval/query_preprocessor.py` normaliza a pergunta: espaços
@@ -298,12 +298,12 @@ de palavras ou processamento de Markdown nesta etapa.
 A função `embed_query` em `embeddings/embedding_service.py` reutiliza a geração
 em lote e a validação dos vetores dos documentos, com modelo e dimensão idênticos.
 O cliente OpenAI usa timeout de 20 segundos e duas retentativas. Perguntas inválidas
-são rejeitadas antes de criar o cliente. O vetor permanece em memória, disponível
-para a futura busca no pgvector; não é retornado nem salvo.
+são rejeitadas antes de criar o cliente. O vetor permanece em memória e é usado na busca no pgvector; não é retornado nem salvo.
 
 A invocação local agora exige `OPENAI_API_KEY` e faz uma chamada paga à OpenAI.
-Não utiliza o banco nesta etapa. A geração real e o deploy dessa etapa ainda
-precisam ser validados; os testes usam um cliente simulado.
+Também requer `DATABASE_URL` e consulta o banco em modo somente de leitura.
+A busca real e o deploy dessa etapa ainda precisam ser validados; os testes usam
+clientes simulados.
 
 Para executar localmente o evento POST de exemplo:
 
@@ -313,6 +313,24 @@ python scripts/invoke_retrieval.py
 
 O fixture usa uma pergunta baseada em `career_goals.md`. Uma requisição HTTP real
 leva apenas `{"question": "..."}` no corpo; o envelope do evento é produzido pela AWS.
+
+### Busca vetorial
+
+`retrieval/retriever.py` coordena a consulta implementada em
+`persistence/vector_repository.py`. A busca usa distância de cosseno (`<=>`),
+filtra pelo mesmo modelo e dimensão da pergunta e retorna os cinco chunks mais
+próximos. O argumento `top_k` aceita de 1 a 20, configurável no código; não é
+recebido do visitante. A consulta inclui desempate por documento e índice do chunk.
+
+O retorno contém `matches` e `matches_count`. Cada resultado inclui texto,
+distância, chave da fonte, versão, identificador do documento, índice e posições
+do chunk. Não há filtro mínimo de relevância: resultados próximos podem não
+responder à pergunta. Uma lista vazia retorna HTTP 200. A conexão solicita modo
+somente de leitura e timeout SQL de 10 segundos, sem gravar dados.
+
+Veja [como validar o retrieval](docs/validacao-retrieval.md), com perguntas de
+exemplo, evidências esperadas e verificações SQL. Nenhuma migração adicional é
+necessária nesta etapa.
 
 ## Desenvolvimento local
 
@@ -466,7 +484,7 @@ antes de publicá-los.
 ## Avaliação e próximos passos
 
 1. Selecionar perguntas com evidências esperadas nos documentos indexados.
-2. Validar o embedding da pergunta com a API real e implementar busca exata por cosseno no pgvector.
+2. Validar a busca real com perguntas e evidências esperadas, incluindo exemplos sem resposta.
 3. Avaliar os chunks recuperados antes de conectar a geração de respostas.
 4. Implementar respostas com fontes, Function URL e integração com o portfólio.
 5. Complementar a validação de reentrega, evento antigo, concorrência e rollback no banco real.

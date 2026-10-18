@@ -1,7 +1,10 @@
-"""Validate, normalize and embed incoming questions; search and generation are not implemented yet."""
+"""Validate, normalize and embed questions and retrieve chunks; generation is not implemented yet."""
 
 import json
 import logging
+import os
+
+import psycopg
 
 from openai import OpenAI
 
@@ -9,6 +12,7 @@ from embeddings.embedding_service import DIMENSIONS, MODEL, embed_query
 
 from interfaces.question_parser import RequestValidationError, parse_question
 from retrieval.query_preprocessor import preprocess_query
+from retrieval.retriever import retrieve_chunks
 
 
 logger = logging.getLogger(__name__)
@@ -38,14 +42,31 @@ def lambda_handler(event, context):
             "body": json.dumps({"error": "Unable to generate the question embedding."}),
         }
 
+    try:
+        with psycopg.connect(
+            os.environ["DATABASE_URL"], connect_timeout=10,
+            options="-c default_transaction_read_only=on -c statement_timeout=10000",
+        ) as connection:
+            matches = retrieve_chunks(connection, vector)
+    except Exception:
+        logger.exception("Vector search failed")
+        return {
+            "statusCode": 503,
+            "headers": headers,
+            "body": json.dumps({"error": "Unable to search the document base."}),
+        }
+
+    logger.info("Chunks retrieved: %d", len(matches))
     logger.info("Query embedding generated: %d dimensions", len(vector))
     return {
         "statusCode": 200,
         "headers": headers,
         "body": json.dumps({
-            "message": "Question embedding generated; search and generation not implemented yet.",
+            "message": "Chunks retrieved; response generation not implemented yet.",
             "question": question,
             "embedding_model": MODEL,
             "embedding_dimensions": DIMENSIONS,
+            "matches": matches,
+            "matches_count": len(matches),
         }, ensure_ascii=False),
     }
