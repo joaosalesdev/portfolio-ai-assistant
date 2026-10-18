@@ -1,4 +1,4 @@
-# Container-based Lambdas. Retrieval Function URL is not implemented yet.
+# Container-based Lambdas. Only retrieval has a public Function URL.
 
 # Indexing Lambda
 resource "aws_lambda_function" "indexing" {

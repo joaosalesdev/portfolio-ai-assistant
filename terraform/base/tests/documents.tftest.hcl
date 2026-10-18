@@ -7,6 +7,14 @@ mock_provider "aws" {
   }
 }
 
+override_resource {
+  target          = aws_s3_bucket.documents
+  override_during = plan
+  values = {
+    arn = "arn:aws:s3:::portfolio-ai-assistant-documents-123456789012-us-east-1"
+  }
+}
+
 run "private_versioned_documents" {
   command = plan
 
@@ -26,4 +34,12 @@ run "private_versioned_documents" {
     condition     = one(aws_s3_bucket_ownership_controls.documents.rule).object_ownership == "BucketOwnerEnforced"
     error_message = "ACLs devem estar desabilitadas."
   }
+  assert {
+    condition = one([
+      for statement in jsondecode(aws_iam_role_policy.github_actions_deploy.policy).Statement :
+      statement if statement.Sid == "RetrievalFunctionUrl"
+    ]).Resource == "arn:aws:lambda:us-east-1:123456789012:function:portfolio-ai-assistant-retrieval"
+    error_message = "Function URL management must be restricted to the retrieval function."
+  }
+
 }

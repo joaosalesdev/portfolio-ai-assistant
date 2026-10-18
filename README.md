@@ -14,7 +14,7 @@ automática das citações e a integração do chat ainda serão implementadas.
 O mantenedor confirmou em 18/10/2026 o indexing completo na AWS, com as
 variáveis de ambiente recebidas de GitHub Actions Secrets via Terraform. Uploads
 e atualizações foram testados: documentos não duplicam e seus chunks são
-substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 70 testes pytest e seis testes Terraform de app
+substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 70 testes pytest e sete testes Terraform de app
 com serviços simulados; base contém mais um teste Terraform.
 
 ## Problema e objetivo
@@ -104,11 +104,11 @@ Embeddings utilizam OpenAI `text-embedding-3-small`. A geração usa OpenAI `gpt
 | GitHub/AWS | Integração OIDC e permissões para publicação e deploy implementadas; deploy na AWS confirmado pelo mantenedor |
 | GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply implementado; deploy funcionando na AWS; configuração de required reviewers não documentada como validada |
 | S3 de documentos e notificação | Fluxo upload → Lambda → leitura → embeddings → banco confirmado pelo mantenedor |
-| Function URL | Ainda não definida no Terraform |
+| Function URL | Retrieval público definido com CORS para https://joaosalesdev.github.io; apply e validação HTTP pendentes |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
 | Retrieval e geração | Entrada HTTP, normalização, embedding, busca vetorial e seleção de contexto e geração implementados; validação das citações pendente |
-| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 70 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
+| Testes | Oito testes Terraform com AWS simulado para S3, variáveis e Function URL, além do teste de invocação dos containers; 70 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
 | Scripts de invocação | Indexing e retrieval locais com eventos JSON implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -286,7 +286,7 @@ O handler retorna JSON com HTTP 200 após gerar o embedding da pergunta, 400 par
 conteúdo inválido, 405 para método não suportado, 413 para corpo muito grande e
 502 para falha na geração do embedding e 503 para falha de consulta ao banco. A resposta contém a pergunta normalizada,
 o modelo, a dimensão, os chunks recuperados e o contexto com fontes, sem expor o vetor. A resposta gerada é retornada no campo `answer`.
-A Function URL e o CORS ainda não estão configurados no Terraform.
+A Function URL e o CORS estão definidos no Terraform; a criação na AWS ocorre no apply.
 
 Após a validação, `retrieval/query_preprocessor.py` normaliza a pergunta: espaços
 repetidos, tabs e quebras de linha tornam-se um único espaço, sem espaços nas
@@ -438,6 +438,24 @@ As configurações em `terraform/base/providers.tf` e
 distintas. Para utilizá-las em outra conta, revisar backend, região,
 credenciais externas e nomes antes de inicializar.
 
+### Endpoint do chat
+
+`terraform/app/function_url.tf` define uma URL HTTPS pública apenas para retrieval,
+com autenticação `NONE` e as duas permissões de invocação exigidas pela AWS.
+O CORS permite origem `https://joaosalesdev.github.io`, método POST e cabeçalho
+`content-type`. O caminho `/portfolio/pt` não faz parte da origem do navegador.
+A Function URL gerencia o preflight CORS; não adicionamos cabeçalhos CORS no handler.
+
+Primeiro aplique `terraform/base` para conceder à role de deploy as permissões de
+gerenciamento da URL, restritas à função retrieval. Depois execute o workflow de
+app. Consulte o endpoint com `terraform -chdir=terraform/app output -raw
+retrieval_function_url` ou no output do apply no Actions.
+
+CORS controla leitura de respostas pelo navegador, não autentica chamadas.
+A URL pública pode ser chamada por outros clientes e gerar consumo de API.
+Não há rate limiting nesta alteração. Veja os comandos de teste no
+[guia de deploy](docs/deployment.md).
+
 ### Retenção de imagens no ECR
 
 O `base` configura uma política de lifecycle em cada repositório (`indexing` e
@@ -532,7 +550,7 @@ antes de publicá-los.
 1. Selecionar perguntas com evidências esperadas nos documentos indexados.
 2. Validar busca e contexto com perguntas e evidências esperadas, incluindo exemplos sem resposta.
 3. Validar a geração real e implementar a conferência automática das citações.
-4. Validar referências das respostas e implementar Function URL e integração com o portfólio.
+4. Aplicar a Function URL/CORS e integrar o chat ao portfólio; validação automática de citações adiada pelo mantenedor.
 5. Complementar a validação de reentrega, evento antigo, concorrência e rollback no banco real.
 6. Definir exclusão de documentos, verificação após deploy e rollback operacional.
 7. Medir qualidade, latência, erros, tokens e custos antes de otimizar.

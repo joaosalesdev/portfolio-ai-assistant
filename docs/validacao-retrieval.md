@@ -93,8 +93,8 @@ Se o resultado estiver ruim, verificar antes de mudar o modelo:
 A consulta usa distância de cosseno e ordenação exata no esquema atual, sem índice
 aproximado criado por esta etapa. Não cria tabelas nem grava dados. O handler
 retorna trechos da base para inspeção, com resposta gerada no campo `answer`. Revisar a seleção
-de conteúdo público antes de disponibilizar um endpoint. A Function URL ainda não
-é criada no Terraform.
+de conteúdo público antes de disponibilizar um endpoint. A Function URL e o CORS estão definidos no Terraform; aplicar e validar
+conforme o guia de deployment antes de integrar o frontend.
 
 ## Conferir o contexto selecionado
 

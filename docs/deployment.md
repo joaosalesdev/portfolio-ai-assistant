@@ -102,7 +102,7 @@ precisar repetir um job; use **Re-run all jobs**.
 Após o apply, confira as funções no console AWS e seus grupos
 `/aws/lambda/portfolio-ai-assistant-indexing` e
 `/aws/lambda/portfolio-ai-assistant-retrieval`, com retenção de 30 dias.
-O Terraform atual ainda não cria Function URL. A notificação S3 para indexing
+O Terraform cria uma Function URL pública para retrieval com CORS do portfólio. A notificação S3 para indexing
 está definida em `terraform/app/events.tf`; o fluxo de upload até a Lambda foi confirmado pelo mantenedor com um log real. A invocação dos handlers anteriores, com mensagens fixas, foi testada na AWS.
 O código local de indexing agora lê documentos no S3; seu deploy e a leitura
 real ainda precisam ser validados.
@@ -114,3 +114,59 @@ com os digests anteriores.
 
 Referências: [environments e aprovação no GitHub](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)
 e [autenticação OIDC na AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws).
+
+## Publicar o endpoint do portfólio
+
+Esta alteração requer aplicar a base antes do workflow de app: a role GitHub
+Actions precisa de Create/Get/Update/DeleteFunctionUrlConfig, concedidos apenas
+para retrieval. As permissões de AddPermission/RemovePermission já existem.
+O workflow não aplica base automaticamente.
+
+```bash
+terraform -chdir=terraform/base plan
+terraform -chdir=terraform/base apply
+```
+
+Depois faça push das mudanças de app na main (ou execute o workflow manualmente).
+O apply configura a URL e duas permissões públicas: InvokeFunctionUrl com auth
+NONE e InvokeFunction restrita a chamadas via Function URL. Indexing continua
+sem endpoint público. Nenhum apply foi executado pelo agente nesta alteração.
+
+Obtenha a URL pelo output do job apply ou, com acesso ao estado:
+
+```bash
+terraform -chdir=terraform/app output -raw retrieval_function_url
+```
+
+No terminal, substitua o exemplo pela URL real e confira o preflight, sem chamar
+embeddings ou geração:
+
+```bash
+CHAT_URL='https://SUBSTITUA.lambda-url.us-east-1.on.aws/'
+curl -i -X OPTIONS "$CHAT_URL" \
+  -H 'Origin: https://joaosalesdev.github.io' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type'
+```
+
+Esperado: status 2xx e cabeçalhos de CORS permitindo a origem, POST e content-type.
+A AWS responde ao preflight. Não é necessário adicionar OPTIONS ao parser da aplicação.
+Repetir com uma origem diferente não deve conceder acesso CORS a essa origem.
+
+Para testar a pergunta real (chamadas pagas à OpenAI e leitura do banco):
+
+```bash
+curl -i "$CHAT_URL" \
+  -H 'Origin: https://joaosalesdev.github.io' \
+  -H 'Content-Type: application/json' \
+  --data '{"question":"Quais oportunidades profissionais João Paulo procura?"}'
+```
+
+Esperado: JSON com `answer`, e cabeçalho Access-Control-Allow-Origin para o portfólio.
+HTTP 403 pode indicar ausência de uma das duas permissões públicas. 502/503 são
+tratados pelo handler para falhas de geração/embedding ou banco; conferir os logs.
+
+Para integrar o frontend, use a URL retornada e envie somente o JSON da pergunta.
+Não envie OPENAI_API_KEY ou DATABASE_URL ao navegador. O CORS vale para toda a
+origem joaosalesdev.github.io, sem restrição por caminho. Ele não bloqueia curl,
+bots ou outras chamadas diretas; não há autenticação ou rate limiting nesta etapa.

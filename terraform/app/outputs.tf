@@ -1,1 +1,4 @@
-# A implementar: outputs do ECR e das funções após criar os recursos.
+output "retrieval_function_url" {
+  description = "Public HTTPS endpoint for portfolio chat POST requests."
+  value       = aws_lambda_function_url.retrieval.function_url
+}

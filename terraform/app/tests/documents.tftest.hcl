@@ -87,3 +87,22 @@ run "reject_empty_database_url" {
   }
   expect_failures = [var.database_url]
 }
+
+run "retrieval_public_url_and_cors" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function_url.retrieval.function_name == aws_lambda_function.retrieval.function_name && aws_lambda_function_url.retrieval.authorization_type == "NONE"
+    error_message = "Only retrieval should expose the public chat URL."
+  }
+
+  assert {
+    condition     = one(aws_lambda_function_url.retrieval.cors).allow_origins == toset(["https://joaosalesdev.github.io"]) && one(aws_lambda_function_url.retrieval.cors).allow_methods == toset(["POST"]) && one(aws_lambda_function_url.retrieval.cors).allow_headers == toset(["content-type"])
+    error_message = "CORS must allow only the portfolio origin, POST and content-type."
+  }
+
+  assert {
+    condition     = aws_lambda_permission.retrieval_url.action == "lambda:InvokeFunctionUrl" && aws_lambda_permission.retrieval_url.function_url_auth_type == "NONE" && aws_lambda_permission.retrieval_url.principal == "*" && aws_lambda_permission.retrieval_url_invoke.action == "lambda:InvokeFunction" && aws_lambda_permission.retrieval_url_invoke.invoked_via_function_url == true && aws_lambda_permission.retrieval_url_invoke.principal == "*"
+    error_message = "Public invocation must include both permissions and be restricted to Function URL calls."
+  }
+}

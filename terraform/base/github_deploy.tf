@@ -64,6 +64,15 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Resource = local.app_lambda_arns
       },
       {
+        Sid    = "RetrievalFunctionUrl"
+        Effect = "Allow"
+        Action = [
+          "lambda:CreateFunctionUrlConfig", "lambda:GetFunctionUrlConfig",
+          "lambda:UpdateFunctionUrlConfig", "lambda:DeleteFunctionUrlConfig"
+        ]
+        Resource = "arn:${data.aws_partition.current.partition}:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.project_name}-retrieval"
+      },
+      {
         Sid    = "AppExecutionRoles"
         Effect = "Allow"
         Action = [
