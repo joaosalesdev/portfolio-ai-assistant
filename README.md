@@ -441,7 +441,8 @@ credenciais externas e nomes antes de inicializar.
 ### Endpoint do chat
 
 `terraform/app/function_url.tf` define uma URL HTTPS pública apenas para retrieval,
-com autenticação `NONE` e as duas permissões de invocação exigidas pela AWS.
+com autenticação `NONE`. O provider AWS 6.67.0 adiciona automaticamente as duas
+permissões públicas de invocação exigidas pela AWS.
 O CORS permite origem `https://joaosalesdev.github.io`, método POST e cabeçalho
 `content-type`. O caminho `/portfolio/pt` não faz parte da origem do navegador.
 A Function URL gerencia o preflight CORS; não adicionamos cabeçalhos CORS no handler.

@@ -1,3 +1,5 @@
+# AWS provider 6.67.0 adds both public invocation permissions for auth NONE.
+# Do not manage additional permission resources in parallel with URL creation.
 resource "aws_lambda_function_url" "retrieval" {
   function_name      = aws_lambda_function.retrieval.function_name
   authorization_type = "NONE"
@@ -8,20 +10,4 @@ resource "aws_lambda_function_url" "retrieval" {
     allow_headers = ["content-type"]
     max_age       = 300
   }
-}
-
-resource "aws_lambda_permission" "retrieval_url" {
-  statement_id           = "AllowPublicFunctionUrl"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.retrieval.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
-}
-
-resource "aws_lambda_permission" "retrieval_url_invoke" {
-  statement_id             = "AllowPublicInvokeViaFunctionUrl"
-  action                   = "lambda:InvokeFunction"
-  function_name            = aws_lambda_function.retrieval.function_name
-  principal                = "*"
-  invoked_via_function_url = true
 }

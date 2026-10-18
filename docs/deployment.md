@@ -128,8 +128,10 @@ terraform -chdir=terraform/base apply
 ```
 
 Depois faça push das mudanças de app na main (ou execute o workflow manualmente).
-O apply configura a URL e duas permissões públicas: InvokeFunctionUrl com auth
-NONE e InvokeFunction restrita a chamadas via Function URL. Indexing continua
+O provider AWS 6.67.0 cria a URL e adiciona automaticamente duas permissões
+públicas: InvokeFunctionUrl com auth NONE e InvokeFunction restrita a chamadas
+via Function URL. Não há recursos aws_lambda_permission adicionais para a URL,
+evitando alterações concorrentes na política durante sua criação. Indexing continua
 sem endpoint público. Nenhum apply foi executado pelo agente nesta alteração.
 
 Obtenha a URL pelo output do job apply ou, com acesso ao estado:
@@ -170,3 +172,22 @@ Para integrar o frontend, use a URL retornada e envie somente o JSON da pergunta
 Não envie OPENAI_API_KEY ou DATABASE_URL ao navegador. O CORS vale para toda a
 origem joaosalesdev.github.io, sem restrição por caminho. Ele não bloqueia curl,
 bots ou outras chamadas diretas; não há autenticação ou rate limiting nesta etapa.
+
+### Conflito durante criação da Function URL
+
+O provider AWS 6.67.0 adiciona as permissões públicas ao criar uma URL com auth
+NONE. Recursos separados para essas mesmas permissões podem executar alterações
+concorrentes na política e causar ResourceConflictException. A configuração atual
+usa apenas a criação automática do provider para as permissões públicas da URL.
+A permissão S3 de indexing permanece como recurso separado.
+
+Após um apply parcial, execute novamente o workflow completo (Re-run all jobs)
+para produzir e revisar um plano atualizado. Não reaplique o plano antigo. O
+Terraform deve reconciliar recursos já gravados no estado; recursos tainted podem
+ser recriados, o que pode alterar o endereço da URL.
+
+Se o novo erro disser explicitamente que a configuração da URL já existe e ela
+não estiver no estado, avalie importar a URL existente. Não exclua a URL ou o estado
+sem conferir o erro e o plan. As permissões criadas automaticamente pelo provider
+não são removidas automaticamente quando a URL é excluída; conferir a política
+em uma futura desativação do endpoint.

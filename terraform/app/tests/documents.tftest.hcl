@@ -101,8 +101,4 @@ run "retrieval_public_url_and_cors" {
     error_message = "CORS must allow only the portfolio origin, POST and content-type."
   }
 
-  assert {
-    condition     = aws_lambda_permission.retrieval_url.action == "lambda:InvokeFunctionUrl" && aws_lambda_permission.retrieval_url.function_url_auth_type == "NONE" && aws_lambda_permission.retrieval_url.principal == "*" && aws_lambda_permission.retrieval_url_invoke.action == "lambda:InvokeFunction" && aws_lambda_permission.retrieval_url_invoke.invoked_via_function_url == true && aws_lambda_permission.retrieval_url_invoke.principal == "*"
-    error_message = "Public invocation must include both permissions and be restricted to Function URL calls."
-  }
 }
