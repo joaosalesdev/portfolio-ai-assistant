@@ -16,7 +16,7 @@ def event():
 
 
 def test_valid_question(event):
-    event["body"] = json.dumps({"question": "  Quais oportunidades João procura?  "})
+    event["body"] = json.dumps({"question": "  Quais  oportunidades\nJoão\tprocura?  "})
     response = lambda_handler(event, None)
     assert response["statusCode"] == 200
     assert json.loads(response["body"])["question"] == "Quais oportunidades João procura?"

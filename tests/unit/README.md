@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 45 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 48 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -103,4 +103,15 @@ do corpo. O script local usa `tests/events/retrieval/post_question.json`.
 
 ```bash
 python -m pytest tests/unit/retrieval/test_question.py -v
+```
+
+## Normalização da pergunta
+
+`retrieval/test_query_preprocessor.py` contém três testes para normalização de
+espaços e quebras de linha, preservação de acentos/maiúsculas/pontuação e
+idempotência. O teste de pergunta válida do handler também verifica a integração.
+Não há chamadas externas nem dependências adicionais.
+
+```bash
+python -m pytest tests/unit/retrieval/test_query_preprocessor.py -v
 ```

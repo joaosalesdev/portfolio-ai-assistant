@@ -14,7 +14,7 @@ respostas e integração do chat ainda serão implementadas.
 O mantenedor confirmou em 18/10/2026 o indexing completo na AWS, com as
 variáveis de ambiente recebidas de GitHub Actions Secrets via Terraform. Uploads
 e atualizações foram testados: documentos não duplicam e seus chunks são
-substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 45 testes pytest e seis testes Terraform de app
+substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 48 testes pytest e seis testes Terraform de app
 com serviços simulados; base contém mais um teste Terraform.
 
 ## Problema e objetivo
@@ -65,7 +65,7 @@ deverá entrar na base. O mecanismo de aprovação ainda será implementado.
 
 ```text
 Visitante → chat do portfólio → HTTPS / Lambda Function URL
-→ validação → embedding da pergunta → busca no pgvector
+→ validação e normalização → embedding da pergunta → busca no pgvector
 → seleção de contexto → API de LLM → resposta com fontes
 ```
 
@@ -95,10 +95,10 @@ respostas ainda será escolhido.
 | Componente | Situação no código |
 | --- | --- |
 | Terraform | Separado em base/app, com estados distintos no backend S3 |
-| Lambdas | Indexing validado na AWS até a persistência; retrieval valida requisições POST e perguntas; imagens Docker por digest e arquitetura x86_64 |
+| Lambdas | Indexing validado na AWS até a persistência; retrieval valida requisições POST e normaliza perguntas; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval valida requisições POST e perguntas; o chat RAG ainda não está implementado |
+| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval valida requisições POST e normaliza perguntas; o chat RAG ainda não está implementado |
 | Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
 | Dockerfiles | Imagens Python 3.14; indexing completo validado na AWS e retrieval com handler mínimo |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
@@ -108,8 +108,8 @@ respostas ainda será escolhido.
 | Function URL | Ainda não definida no Terraform |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
-| Retrieval e geração | Entrada HTTP validada; busca vetorial e geração ainda não implementadas |
-| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 45 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
+| Retrieval e geração | Entrada HTTP validada e pergunta normalizada; busca vetorial e geração ainda não implementadas |
+| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 48 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
 | Scripts de invocação | Indexing e retrieval locais com eventos JSON implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -285,8 +285,14 @@ espaços nas extremidades. O corpo decodificado é limitado a 16 KiB.
 
 O handler retorna JSON com HTTP 200 para uma pergunta válida, 400 para conteúdo
 inválido, 405 para método não suportado e 413 para corpo muito grande. Nesta etapa,
-a resposta apenas confirma a validação; não há busca, geração ou chamadas externas.
+a resposta confirma a validação e retorna a pergunta normalizada; não há busca, geração ou chamadas externas.
 A Function URL e o CORS ainda não estão configurados no Terraform.
+
+Após a validação, `retrieval/query_preprocessor.py` normaliza a pergunta: espaços
+repetidos, tabs e quebras de linha tornam-se um único espaço, sem espaços nas
+extremidades. Acentos, maiúsculas e pontuação são preservados. O limite de 2.000
+caracteres continua sendo verificado antes dessa normalização. Não há remoção
+de palavras ou processamento de Markdown nesta etapa.
 
 Para executar localmente o evento POST de exemplo:
 
