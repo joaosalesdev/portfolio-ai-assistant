@@ -2,6 +2,7 @@
 
 import json
 import time
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -33,5 +34,9 @@ def invoke(port, event, expected_error=None):
 if __name__ == "__main__":
     for component, port in (("indexing", 9000), ("retrieval", 9001)):
         # Invalid indexing input exercises handler loading without calling AWS.
-        invoke(port, {}, expected_error="ValueError" if component == "indexing" else None)
+        event = {}
+        if component == "retrieval":
+            path = Path(__file__).resolve().parents[1] / "tests/events/retrieval/post_question.json"
+            event = json.loads(path.read_text(encoding="utf-8"))
+        invoke(port, event, expected_error="ValueError" if component == "indexing" else None)
         print(f"{component}: container invocation passed")
