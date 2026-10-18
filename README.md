@@ -5,19 +5,17 @@ técnicas por meio de um chat integrado ao portfólio. As respostas deverão uti
 documentos públicos selecionados, apresentar fontes e reconhecer quando não houver
 evidência suficiente.
 
-**Em desenvolvimento.** O repositório contém handlers mínimos e definições Terraform
-para duas Lambdas configuradas com imagens Docker por digest. Os Dockerfiles estão
-implementados; o build e a invocação local dos handlers foram validados.
-O deploy na AWS está funcionando: as duas Lambdas estão implantadas e foram
-testadas, retornando mensagens fixas dos handlers então implantados. Essa validação foi
-confirmada pelo mantenedor em 12/10/2026. O pipeline RAG ainda está pendente;
-a operação validada corresponde às funções mínimas no ambiente dev, sem chat
-integrado ou respostas geradas por IA.
+**Em desenvolvimento.** O fluxo de indexação está implementado: valida eventos
+S3, lê documentos, normaliza o texto, cria chunks, gera embeddings OpenAI e
+persiste os dados no PostgreSQL + pgvector. O mantenedor confirmou a leitura real
+do S3 e apresentou registros com embeddings no banco. Consulta, geração de
+respostas e integração do chat ainda serão implementadas.
 
-No código local, a primeira etapa de indexing já está implementada: validação
-e interpretação de eventos S3, além da leitura de documentos no S3. A normalização do texto também está implementada. O chunking também está implementado. A geração de embeddings também está implementada. Os 33
-testes pytest passaram localmente, com clientes externos simulados. O deploy
-dessa nova etapa ainda não foi confirmado.
+O mantenedor confirmou em 18/10/2026 o indexing completo na AWS, com as
+variáveis de ambiente recebidas de GitHub Actions Secrets via Terraform. Uploads
+e atualizações foram testados: documentos não duplicam e seus chunks são
+substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 33 testes pytest e seis testes Terraform de app
+com serviços simulados; base contém mais um teste Terraform.
 
 ## Problema e objetivo
 
@@ -55,11 +53,12 @@ Administrador → documentos aprovados em bucket S3 privado
 → API de embeddings → PostgreSQL + pgvector
 ```
 
-A indexação deverá preservar a origem dos trechos e registrar hash, versão e
-configuração dos embeddings. Documentos alterados serão reprocessados, com
-substituição atômica dos chunks após a geração dos novos embeddings.
+A indexação preserva a origem dos trechos e registra hash, versão e configuração
+dos embeddings. Documentos alterados são reprocessados, com substituição atômica
+dos chunks por documento após a geração dos novos embeddings. O sequencer S3
+é usado na persistência para ignorar eventos repetidos ou mais antigos.
 
-O bucket não será público. Somente conteúdo autorizado para respostas públicas
+O bucket é privado. Somente conteúdo autorizado para respostas públicas
 deverá entrar na base. O mecanismo de aprovação ainda será implementado.
 
 ### Consulta
@@ -78,12 +77,12 @@ A busca inicial planejada é exata, por distância de cosseno. Chunking, Top-K e
 eventuais thresholds serão avaliados com perguntas e evidências conhecidas.
 Similaridade não será interpretada como garantia de verdade.
 
-### Infraestrutura prevista
+### Infraestrutura e componentes
 
 - Duas Lambdas independentes, com imagens Docker armazenadas no Amazon ECR.
 - S3 para documentos e notificação de criação de objetos para a indexação.
 - Function URL para consultas do portfólio; indexação sem endpoint público.
-- PostgreSQL + pgvector; Neon permanece como candidato de hospedagem.
+- PostgreSQL + pgvector, com banco Neon já utilizado pelo mantenedor.
 - Terraform para recursos AWS e roles IAM separadas.
 - CloudWatch para logs e métricas.
 - GitHub Actions implementado para validação, build, publicação e deploy.
@@ -96,21 +95,21 @@ respostas ainda será escolhido.
 | Componente | Situação no código |
 | --- | --- |
 | Terraform | Separado em base/app, com estados distintos no backend S3 |
-| Lambdas | Duas funções implantadas na AWS e testadas com mensagens fixas; imagens Docker por digest e arquitetura x86_64 |
+| Lambdas | Indexing validado na AWS até a persistência; retrieval ainda retorna mensagem fixa; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval retorna mensagem fixa; não executam RAG |
+| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval retorna mensagem fixa; o chat RAG ainda não está implementado |
 | Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
-| Dockerfiles | Imagens Python 3.14 com handlers mínimos; invocação validada localmente e nas Lambdas implantadas na AWS |
+| Dockerfiles | Imagens Python 3.14; indexing completo validado na AWS e retrieval com handler mínimo |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
 | GitHub/AWS | Integração OIDC e permissões para publicação e deploy implementadas; deploy na AWS confirmado pelo mantenedor |
 | GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply implementado; deploy funcionando na AWS; configuração de required reviewers não documentada como validada |
-| S3 de documentos e notificação | Upload → Lambda confirmado pelo mantenedor com log real; permissão de leitura definida, leitura do objeto implementada e testada com cliente simulado |
+| S3 de documentos e notificação | Fluxo upload → Lambda → leitura → embeddings → banco confirmado pelo mantenedor |
 | Function URL | Ainda não definida no Terraform |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
-| Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; testes simulados, validação real pendente |
+| Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
 | Retrieval e geração | Módulos reservados |
-| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 33 casos pytest de parsing, ingestão, chunking e embeddings |
+| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 33 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
 | Scripts de invocação | Indexing local com evento JSON implementado; retrieval pendente |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -132,8 +131,9 @@ portfolio-ai-assistant/
 │   ├── generation/         # Respostas fundamentadas
 │   └── persistence/        # Operações PostgreSQL + pgvector
 ├── tests/
-│   ├── unit/              # Testes da entrada S3 e pastas por módulo
+│   ├── unit/              # Testes unitários por responsabilidade
 │   └── events/            # Exemplos S3 e HTTP
+├── sql/                   # Criação das tabelas de documentos e chunks
 ├── scripts/               # Invocação das funções
 ├── docker/                # Dockerfiles de indexação e consulta
 ├── terraform/
@@ -152,10 +152,10 @@ injetados quando necessário para permitir testes sem AWS ou chamadas pagas.
 
 As imagens usam os handlers `interfaces/lambda_handlers/indexing.py` e
 `interfaces/lambda_handlers/retrieval.py`. Indexing recebe eventos S3; retrieval
-será a entrada de consulta HTTP. O processamento dos documentos ainda será
-implementado no fluxo de indexing.
+será a entrada de consulta HTTP. O processamento de documentos já está
+implementado no indexing; a consulta permanece como handler mínimo.
 
-### Primeira etapa de indexing
+### Entrada, leitura e normalização
 
 O handler chama `interfaces/s3_event_parser.py`, que:
 
@@ -166,7 +166,8 @@ O handler chama `interfaces/s3_event_parser.py`, que:
 - Rejeita eventos inválidos com `ValueError`, registrado e propagado pelo handler.
 
 O retorno contém `statusCode`, uma mensagem em inglês, a lista `objects` e
-as contagens `documents_loaded` e `chunks_created`.
+as contagens `documents_loaded`, `chunks_created`, `embeddings_generated`,
+`documents_saved` e `documents_skipped`.
 O handler chama `ingestion/loader.py` para cada objeto. O loader aceita `.md`
 e `.txt`, solicita o objeto por bucket e chave, usa `VersionId` quando presente,
 decodifica o conteúdo em UTF-8 e fecha o corpo da resposta. Documentos vazios,
@@ -174,7 +175,7 @@ formatos não suportados e conteúdo inválido causam erro. Falhas de leitura s�
 registradas pelo handler e propagadas, sem retornar sucesso falso.
 
 O loader retorna texto e identificação da fonte para as próximas etapas. O handler
-retorna apenas os objetos, `documents_loaded` e `chunks_created`, sem expor o conteúdo. O handler normaliza o texto com `ingestion/preprocessor.py`: padroniza quebras
+retorna os objetos e as contagens de processamento, sem expor o conteúdo. O handler normaliza o texto com `ingestion/preprocessor.py`: padroniza quebras
 de linha, remove espaços finais sem significado e reduz linhas vazias excessivas
 fora de blocos de código. Preserva indentação, blocos de código e quebras de linha
 Markdown com dois espaços. Ainda não há mecanismo de aprovação de
@@ -223,8 +224,8 @@ execução nesta versão inicial.
 
 ### Persistência PostgreSQL + pgvector
 
-A extensão `vector` já foi confirmada pelo mantenedor. Antes de invocar o novo
-handler, execute [sql/001_vector_storage.sql](sql/001_vector_storage.sql) no banco
+A extensão `vector` e as tabelas já estão em uso no banco do mantenedor.
+Para preparar outro ambiente, execute [sql/001_vector_storage.sql](sql/001_vector_storage.sql) no banco
 alvo, por exemplo pelo editor SQL do DBeaver. O script cria `portfolio_documents`
 e `portfolio_chunks` com `vector(1536)`. Ele não é executado automaticamente pelo
 handler. Para tabelas já existentes, revise sua compatibilidade; `IF NOT EXISTS`
@@ -249,7 +250,10 @@ não removem documentos nesta implementação.
 
 O handler retorna `documents_saved` e `documents_skipped`, além das contagens das
 etapas anteriores. Os testes usam conexões simuladas: não comprovam execução do
-SQL, rollback ou concorrência em um PostgreSQL real. A validação real está pendente.
+SQL, rollback ou concorrência em um PostgreSQL real. Separadamente, o mantenedor
+validou a inserção e a atualização reais sem duplicação, inclusive com aumento
+e redução do número de chunks. Rollback, concorrência e descarte de eventos
+antigos ainda não têm validação específica registrada.
 
 ### Variáveis de ambiente
 
@@ -316,9 +320,9 @@ O script usa `tests/events/indexing/s3_object_created.json`; edite esse JSON
 para testar outro evento.
 O contexto é `None`. Este comando não invoca a Lambda na AWS nem usa Docker;
 executa o handler Python atual, que valida o evento e retorna os dados dos
-objetos e carrega os documentos no S3. Essa invocação agora faz chamadas reais
-à AWS e requer credenciais e permissão de leitura. Quando integrações externas forem adicionadas
-ao handler, elas também serão executadas pela invocação local.
+objetos, lê documentos no S3, chama a OpenAI e grava no PostgreSQL. Requer
+credenciais AWS, permissão de leitura, `OPENAI_API_KEY` e `DATABASE_URL`.
+Essa execução gera consumo da API e altera os registros do banco.
 
 Para depurar no VS Code, selecione o interpretador da `.venv` com
 **Python: Select Interpreter**. Na configuração de execução local do
@@ -361,11 +365,11 @@ disparam `s3:ObjectCreated:*`, inclusive uploads multipart. O prefixo é
 configurável por `documents_prefix`; a role da Lambda só pode ler objetos e
 versões sob esse prefixo. Uploads fora dele não disparam indexing.
 
-O handler de indexing no código local valida o evento e extrai os dados dos
-objetos e carrega documentos Markdown e texto. O pipeline
-ainda precisa ser implementado, com tratamento de eventos duplicados e fora de
-ordem. A leitura já utiliza a versão indicada no evento. Exclusões não disparam eventos
-nesta configuração. Nenhum arquivo é enviado pelo Terraform.
+O handler de indexing processa documentos Markdown e texto até a persistência
+dos embeddings. A leitura utiliza a versão indicada no evento, e a persistência
+compara o sequencer para ignorar eventos duplicados ou antigos. Isso ainda não
+evita chamadas repetidas à API de embeddings. Exclusões não disparam eventos
+nesta configuração nem removem dados do banco. Nenhum arquivo é enviado pelo Terraform.
 
 ### Deployment Workflow
 
@@ -398,11 +402,11 @@ configuração de required reviewers no GitHub; a declaração do environment no
 YAML, sozinha, não exige aprovação.
 
 Veja [como preparar e executar o deploy](docs/deployment.md).
-O deploy e a invocação das Lambdas na AWS foram confirmados pelo mantenedor
-em 12/10/2026, com retorno das mensagens fixas esperadas. Os procedimentos de
-rollback e a verificação automatizada das funções após o deploy ainda estão
-pendentes. Essa confirmação não abrange o pipeline RAG nem a integração do chat,
-que ainda serão implementados.
+O deploy inicial foi confirmado em 12/10/2026. Em 18/10/2026, o mantenedor
+confirmou o indexing completo na AWS, incluindo secrets, novos documentos e
+atualizações dos chunks sem duplicação. Rollback operacional e verificação
+automatizada após deploy continuam pendentes. Retrieval, geração de respostas
+e integração do chat ainda serão implementados.
 
 ## Segurança e operação
 
@@ -423,14 +427,17 @@ antes de publicá-los.
 
 ## Avaliação e próximos passos
 
-1. Verificar a configuração de aprovação no environment dev e aplicar a base quando seus recursos mudarem.
-2. Adicionar verificação automatizada das Lambdas na AWS após o deploy e documentar rollback.
-3. Selecionar poucos documentos e anotar perguntas com evidências esperadas.
-4. Executar o SQL inicial e validar a escrita real e o fluxo completo na AWS.
-5. Validar atualização/exclusão de documentos e processamento idempotente.
-6. Implementar consulta, Function URL e integração com o portfólio.
-7. Avaliar retrieval separadamente da geração.
-8. Medir latência, erros, tokens e custos antes de otimizar.
+1. Selecionar perguntas com evidências esperadas nos documentos indexados.
+2. Implementar embedding da pergunta e busca exata por cosseno no pgvector.
+3. Avaliar os chunks recuperados antes de conectar a geração de respostas.
+4. Implementar respostas com fontes, Function URL e integração com o portfólio.
+5. Complementar a validação de reentrega, evento antigo, concorrência e rollback no banco real.
+6. Definir exclusão de documentos, verificação após deploy e rollback operacional.
+7. Medir qualidade, latência, erros, tokens e custos antes de otimizar.
 
-Implementação, testes locais, publicação e operação serão registrados como etapas
+Os diagramas atuais mostram a arquitetura geral e o deployment. Um diagrama mais
+detalhado de sequência pode ser acrescentado quando o fluxo de consulta estiver
+implementado, refletindo seu comportamento real.
+
+Implementação, testes locais, publicação e operação são registrados como etapas
 distintas. Não há métricas de uso ou incidentes de produção documentados.
