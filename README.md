@@ -8,13 +8,13 @@ evidência suficiente.
 **Em desenvolvimento.** O fluxo de indexação está implementado: valida eventos
 S3, lê documentos, normaliza o texto, cria chunks, gera embeddings OpenAI e
 persiste os dados no PostgreSQL + pgvector. O mantenedor confirmou a leitura real
-do S3 e apresentou registros com embeddings no banco. A consulta já recupera chunks e prepara o contexto; geração de respostas e
-integração do chat ainda serão implementadas.
+do S3 e apresentou registros com embeddings no banco. A consulta recupera chunks, prepara contexto e gera respostas. A validação
+automática das citações e a integração do chat ainda serão implementadas.
 
 O mantenedor confirmou em 18/10/2026 o indexing completo na AWS, com as
 variáveis de ambiente recebidas de GitHub Actions Secrets via Terraform. Uploads
 e atualizações foram testados: documentos não duplicam e seus chunks são
-substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 64 testes pytest e seis testes Terraform de app
+substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 70 testes pytest e seis testes Terraform de app
 com serviços simulados; base contém mais um teste Terraform.
 
 ## Problema e objetivo
@@ -87,8 +87,7 @@ Similaridade não será interpretada como garantia de verdade.
 - CloudWatch para logs e métricas.
 - GitHub Actions implementado para validação, build, publicação e deploy.
 
-Embeddings utilizam OpenAI `text-embedding-3-small`. O modelo de geração das
-respostas ainda será escolhido.
+Embeddings utilizam OpenAI `text-embedding-3-small`. A geração usa OpenAI `gpt-6-luna` via Responses API, com raciocínio `none`.
 
 ## Estado atual do repositório
 
@@ -108,8 +107,8 @@ respostas ainda será escolhido.
 | Function URL | Ainda não definida no Terraform |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
-| Retrieval e geração | Entrada HTTP, normalização, embedding, busca vetorial e seleção de contexto implementados; geração ainda pendente |
-| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 64 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
+| Retrieval e geração | Entrada HTTP, normalização, embedding, busca vetorial e seleção de contexto e geração implementados; validação das citações pendente |
+| Testes | Sete testes Terraform com AWS simulado para S3 e variáveis das Lambdas, além do teste de invocação dos containers; 70 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
 | Scripts de invocação | Indexing e retrieval locais com eventos JSON implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -153,7 +152,7 @@ injetados quando necessário para permitir testes sem AWS ou chamadas pagas.
 As imagens usam os handlers `interfaces/lambda_handlers/indexing.py` e
 `interfaces/lambda_handlers/retrieval.py`. Indexing recebe eventos S3; retrieval
 valida a entrada HTTP. O processamento de documentos já está implementado no
-indexing; retrieval já recupera os chunks e prepara o contexto, sem gerar respostas.
+indexing; retrieval recupera chunks, prepara o contexto e gera respostas.
 
 ### Entrada, leitura e normalização
 
@@ -286,7 +285,7 @@ espaços nas extremidades. O corpo decodificado é limitado a 16 KiB.
 O handler retorna JSON com HTTP 200 após gerar o embedding da pergunta, 400 para
 conteúdo inválido, 405 para método não suportado, 413 para corpo muito grande e
 502 para falha na geração do embedding e 503 para falha de consulta ao banco. A resposta contém a pergunta normalizada,
-o modelo, a dimensão, os chunks recuperados e o contexto com fontes, sem expor o vetor. Ainda não há geração de respostas.
+o modelo, a dimensão, os chunks recuperados e o contexto com fontes, sem expor o vetor. A resposta gerada é retornada no campo `answer`.
 A Function URL e o CORS ainda não estão configurados no Terraform.
 
 Após a validação, `retrieval/query_preprocessor.py` normaliza a pergunta: espaços
@@ -350,7 +349,33 @@ O orçamento é de caracteres, não tokens. `has_context` indica somente que há
 texto selecionado; não garante evidência suficiente para responder. Os documentos
 continuam sendo dados não confiáveis: os identificadores não impedem prompt
 injection. A geração deverá separar instruções de conteúdo e validar as fontes.
-Ainda não há chamada a modelo de geração nesta etapa.
+O contexto é enviado ao modelo na etapa seguinte de geração.
+
+### Geração de respostas
+
+`generation/generator.py` recebe a pergunta e o contexto selecionado. Usa
+`gpt-6-luna` via Responses API com `reasoning={"effort": "none"}`, `store=False`
+e limite de 800 tokens de saída. As instruções ficam separadas dos dados e
+orientam respostas no idioma da pergunta, com citações `[S1]`, `[S2]`, sem inventar
+informações e reconhecendo quando os documentos não fornecem evidência suficiente.
+
+A chamada de geração tem timeout de 30 segundos e não usa retentativas automáticas.
+Sem contexto, retorna uma mensagem fixa em português e pula a geração. O embedding
+da pergunta e a consulta ao banco já ocorreram nesse caso.
+
+A resposta inclui `answer`, `generation_model` e `generation_skipped`. Falhas de
+API, saída incompleta ou texto vazio retornam HTTP 502. Ainda não há conferência
+automática das citações nem garantia de sustentação factual. `sources` contém as
+fontes selecionadas, que podem não coincidir com as efetivamente citadas.
+
+A execução de `python scripts/invoke_retrieval.py` agora gera consumo da OpenAI
+para embedding e, quando há contexto, geração. Continua usando `OPENAI_API_KEY`
+e `DATABASE_URL`; nenhuma dependência adicional é necessária. A geração real não
+foi executada pelo agente. O timeout total da Lambda permanece em 120 segundos,
+sem um controle global de duração entre as etapas.
+
+Referências: [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)
+e [geração de texto](https://developers.openai.com/api/docs/guides/text).
 
 ## Desenvolvimento local
 
@@ -481,8 +506,9 @@ Veja [como preparar e executar o deploy](docs/deployment.md).
 O deploy inicial foi confirmado em 12/10/2026. Em 18/10/2026, o mantenedor
 confirmou o indexing completo na AWS, incluindo secrets, novos documentos e
 atualizações dos chunks sem duplicação. Rollback operacional e verificação
-automatizada após deploy continuam pendentes. Retrieval, geração de respostas
-e integração do chat ainda serão implementados.
+automatizada após deploy continuam pendentes. Retrieval e geração estão
+implementados no código; a geração real e o deploy dessa etapa ainda precisam
+de validação. A integração do chat ainda será implementada.
 
 ## Segurança e operação
 
@@ -505,7 +531,7 @@ antes de publicá-los.
 
 1. Selecionar perguntas com evidências esperadas nos documentos indexados.
 2. Validar busca e contexto com perguntas e evidências esperadas, incluindo exemplos sem resposta.
-3. Implementar geração de respostas usando o contexto selecionado e os identificadores de fontes.
+3. Validar a geração real e implementar a conferência automática das citações.
 4. Validar referências das respostas e implementar Function URL e integração com o portfólio.
 5. Complementar a validação de reentrega, evento antigo, concorrência e rollback no banco real.
 6. Definir exclusão de documentos, verificação após deploy e rollback operacional.

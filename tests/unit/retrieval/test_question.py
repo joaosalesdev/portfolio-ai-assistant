@@ -18,6 +18,8 @@ def openai_client(monkeypatch):
     client = factory.return_value.__enter__.return_value
     client.embeddings.create.return_value = SimpleNamespace(
         data=[SimpleNamespace(index=0, embedding=[0.1] * 1536)])
+    client.responses.create.return_value = SimpleNamespace(
+        status="completed", output_text="João procura Backend e Cloud [S1].")
     monkeypatch.setattr("interfaces.lambda_handlers.retrieval.OpenAI", factory)
     return factory
 
@@ -48,6 +50,9 @@ def test_valid_question(event, openai_client):
     assert "embedding" not in body
     assert body["context"] == ""
     assert body["has_context"] is False
+    assert body["generation_skipped"] is True
+    assert body["generation_model"] is None
+    openai_client.return_value.__enter__.return_value.responses.create.assert_not_called()
     client = openai_client.return_value.__enter__.return_value
     assert client.embeddings.create.call_args.kwargs["input"] == ["Quais oportunidades João procura?"]
     assert response["headers"]["Content-Type"] == "application/json"
@@ -114,6 +119,8 @@ def test_search_results(event, database):
     assert body["sources"][0]["id"] == "S1"
     assert body["sources_count"] == 1
     assert body["has_context"] is True
+    assert body["generation_model"] == "gpt-6-luna"
+    assert body["answer"] == "João procura Backend e Cloud [S1]."
     assert body["matches"][0]["source"] == "documents/career_goals.md"
     assert len(retriever.call_args.args[1]) == 1536
 
@@ -124,3 +131,12 @@ def test_database_failure(event, database):
     response = lambda_handler(event, None)
     assert response["statusCode"] == 503
     assert "Private database details" not in response["body"]
+
+
+def test_generation_failure(event, database, openai_client):
+    database[1].return_value = [{"source": "career.md", "text": "Backend"}]
+    client = openai_client.return_value.__enter__.return_value
+    client.responses.create.side_effect = RuntimeError("Private provider details")
+    response = lambda_handler(event, None)
+    assert response["statusCode"] == 502
+    assert "Private provider details" not in response["body"]

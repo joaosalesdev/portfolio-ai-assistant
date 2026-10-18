@@ -1,7 +1,7 @@
 # Validação inicial do retrieval
 
-O objetivo desta etapa é conferir se a busca recupera evidências úteis. Ainda não
-há geração de respostas nem filtro de relevância mínima. O contexto já é selecionado
+O objetivo é conferir os trechos recuperados e a resposta gerada. A geração
+já está implementada, mas não há filtro mínimo de relevância. O contexto já é selecionado
 com limite de tamanho e identificadores de fontes.
 Os testes automatizados simulam OpenAI e PostgreSQL; a validação abaixo usa os
 serviços reais e não foi executada pelo agente.
@@ -33,7 +33,8 @@ python scripts/invoke_retrieval.py
 ```
 
 O script lê `tests/events/retrieval/post_question.json`. Essa execução chama a
-OpenAI, gera cobrança e consulta o banco, sem atualizar os documentos.
+OpenAI para embeddings e, quando há contexto, geração. Gera cobrança e consulta
+o banco, sem atualizar os documentos.
 
 No JSON de `body` da resposta, verificar:
 
@@ -91,7 +92,7 @@ Se o resultado estiver ruim, verificar antes de mudar o modelo:
 
 A consulta usa distância de cosseno e ordenação exata no esquema atual, sem índice
 aproximado criado por esta etapa. Não cria tabelas nem grava dados. O handler
-retorna trechos da base para inspeção, sem gerar resposta final. Revisar a seleção
+retorna trechos da base para inspeção, com resposta gerada no campo `answer`. Revisar a seleção
 de conteúdo público antes de disponibilizar um endpoint. A Function URL ainda não
 é criada no Terraform.
 
@@ -108,4 +109,20 @@ ser menor que `matches_count`; isso é esperado. `has_context: false` significa
 que nenhum trecho foi selecionado, e `true` não comprova relevância para a pergunta.
 
 Não há nova chamada paga ou consulta adicional na seleção: ela usa os resultados
-já recuperados. O comando completo continua chamando embeddings e PostgreSQL.
+já recuperados. O comando completo chama embeddings, PostgreSQL e geração quando há contexto.
+
+## Conferir a geração
+
+Executar `python scripts/invoke_retrieval.py` com as variáveis disponíveis. Verificar
+`answer` e comparar cada afirmação com o trecho citado. O modelo esperado é
+`gpt-6-luna`, com `generation_skipped: false` quando houver contexto. Sem contexto,
+o modelo deve ser null e `generation_skipped: true`, com mensagem fixa de falta
+de informação. Nenhuma chamada real foi feita pelo agente nesta implementação.
+
+Testar uma pergunta respondível, uma paráfrase e uma sem informação documentada,
+como pretensão salarial. Perguntas fora do assunto podem recuperar trechos mesmo
+sem evidência suficiente; a resposta deve reconhecer a limitação.
+
+A conferência automática de citações será implementada separadamente. Por enquanto,
+verificar manualmente se cada `[S1]` etc. existe em `sources` e sustenta a afirmação.
+HTTP 502 também pode indicar falha, saída incompleta ou vazia na geração.

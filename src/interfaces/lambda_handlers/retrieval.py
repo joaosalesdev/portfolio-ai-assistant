@@ -1,4 +1,4 @@
-"""Validate, normalize and embed questions and prepare retrieval context; generation is not implemented yet."""
+"""Answer portfolio questions using retrieved document context."""
 
 import json
 import logging
@@ -9,6 +9,7 @@ import psycopg
 from openai import OpenAI
 
 from embeddings.embedding_service import DIMENSIONS, MODEL, embed_query
+from generation.generator import generate_answer
 
 from interfaces.question_parser import RequestValidationError, parse_question
 from retrieval.context_selector import select_context
@@ -58,6 +59,21 @@ def lambda_handler(event, context):
         }
 
     selected = select_context(matches)
+    try:
+        if selected["context"]:
+            with OpenAI(timeout=30.0, max_retries=0) as client:
+                generated = generate_answer(client, question, selected["context"])
+        else:
+            generated = generate_answer(None, question, selected["context"])
+    except Exception:
+        logger.exception("Response generation failed")
+        return {
+            "statusCode": 502,
+            "headers": headers,
+            "body": json.dumps({"error": "Unable to generate an answer."}),
+        }
+
+    logger.info("Response generated; skipped: %s", generated["generation_skipped"])
     logger.info("Context sources selected: %d; characters: %d",
                 len(selected["sources"]), len(selected["context"]))
     logger.info("Chunks retrieved: %d", len(matches))
@@ -66,7 +82,8 @@ def lambda_handler(event, context):
         "statusCode": 200,
         "headers": headers,
         "body": json.dumps({
-            "message": "Context prepared; response generation not implemented yet.",
+            "message": "Request processed.",
+            **generated,
             "question": question,
             "embedding_model": MODEL,
             "embedding_dimensions": DIMENSIONS,

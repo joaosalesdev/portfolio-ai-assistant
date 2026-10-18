@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 64 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 70 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -129,7 +129,7 @@ criam o cliente OpenAI. A suíte não faz chamadas pagas.
 `retrieval/test_retriever.py` verifica a consulta parametrizada por cosseno, os
 filtros de modelo/dimensão, Top-K, resultados vazios e rejeição de vetores inválidos.
 Os testes do handler simulam PostgreSQL, verificam o retorno dos matches e o erro
-HTTP 503 sem detalhes internos. Os 64 casos da suíte passam sem serviços externos.
+HTTP 503 sem detalhes internos. Os 70 casos da suíte passam sem serviços externos.
 
 ```bash
 python -m pytest tests/unit/retrieval -v
@@ -148,3 +148,16 @@ vazio e associação entre o identificador S1 e a fonte retornada.
 ```bash
 python -m pytest tests/unit/retrieval/test_context_selector.py -v
 ```
+
+## Geração de respostas
+
+`generation/test_generator.py` verifica pergunta e contexto separados das instruções,
+modelo e parâmetros, ausência de chamada sem contexto, saída vazia/incompleta e
+propagação de falhas. Os testes do handler verificam a resposta e HTTP 502 em
+falhas. Os 70 testes usam clientes simulados e não fazem chamadas pagas.
+
+```bash
+python -m pytest tests/unit/generation -v
+```
+
+A validação automática das citações ainda não faz parte desta implementação.
