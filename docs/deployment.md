@@ -76,8 +76,8 @@ a AWS. Se algum teste falhar, o job para antes do build, publicação e deploy.
 Alterações em `tests/` ou `pytest.ini` também disparam o workflow na main.
 
 Depois, valida o Terraform, constrói as duas imagens linux/amd64 e invoca
-seus handlers localmente. Este teste verifica o empacotamento: retrieval retorna uma resposta e indexing
-rejeita um evento vazio com ValueError antes de acessar a AWS. Não valida a leitura
+seus handlers localmente. Este teste verifica o empacotamento: retrieval retorna HTTP 400 para um evento vazio e indexing
+rejeita esse evento com ValueError, sem chamadas à OpenAI, ao banco ou à AWS. Não valida a leitura
 S3 nem um pipeline RAG.
 
 Depois, assume a role via OIDC, publica as imagens e consulta seus digests.

@@ -29,6 +29,7 @@ resource "aws_lambda_function" "indexing" {
 # Retrieval Lambda
 resource "aws_lambda_function" "retrieval" {
   function_name = local.retrieval_function_name
+  timeout       = 120
   role          = aws_iam_role.retrieval_lambda.arn
 
   package_type  = "Image"

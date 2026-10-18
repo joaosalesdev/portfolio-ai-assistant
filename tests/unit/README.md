@@ -30,7 +30,7 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 48 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
+O `pytest.ini` configura os imports a partir de `src/`. Os 51 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
 validados localmente. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
 ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
@@ -115,3 +115,11 @@ Não há chamadas externas nem dependências adicionais.
 ```bash
 python -m pytest tests/unit/retrieval/test_query_preprocessor.py -v
 ```
+
+## Embedding da pergunta
+
+O serviço de embeddings testa a configuração compartilhada com os documentos e
+a rejeição de pergunta vazia antes de chamar a API. Os testes do handler usam uma
+factory OpenAI simulada, verificam o envio da pergunta normalizada e o retorno
+HTTP 502 sem detalhes internos quando a geração falha. Entradas inválidas não
+criam o cliente OpenAI. A suíte não faz chamadas pagas.

@@ -57,3 +57,22 @@ def test_propagate_api_failure():
     client.embeddings.create.side_effect = RuntimeError("API unavailable")
     with pytest.raises(RuntimeError, match="API unavailable"):
         embed_chunks(client, [{"text": "AWS"}])
+
+
+def test_embed_query_uses_document_configuration():
+    from embeddings.embedding_service import embed_query
+
+    client = Mock()
+    client.embeddings.create.return_value = response(0)
+    assert embed_query(client, "Quais oportunidades?") == [0.0] * DIMENSIONS
+    client.embeddings.create.assert_called_once_with(
+        model=MODEL, dimensions=DIMENSIONS, input=["Quais oportunidades?"], encoding_format="float")
+
+
+def test_empty_query_does_not_call_api():
+    from embeddings.embedding_service import embed_query
+
+    client = Mock()
+    with pytest.raises(ValueError, match="empty"):
+        embed_query(client, "  ")
+    client.embeddings.create.assert_not_called()
