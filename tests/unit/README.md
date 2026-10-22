@@ -30,13 +30,14 @@ Para executar somente os testes da entrada S3:
 python -m pytest tests/unit/test_s3_event.py -v
 ```
 
-O `pytest.ini` configura os imports a partir de `src/`. Os 70 casos de parsing, ingestão, normalização, chunking, embeddings e persistência foram
-validados localmente. O workflow de deploy agora executa `python -m pytest -v`
+O `pytest.ini` configura os imports a partir de `src/`. Em 22/10/2026, os 70 casos de parsing, ingestão, normalização, chunking, embeddings,
+persistência, retrieval e geração passaram localmente com clientes simulados. O workflow de deploy agora executa `python -m pytest -v`
 com Python 3.14 antes do build e da autenticação AWS. Alterações em `tests/`
-ou `pytest.ini` também disparam o workflow em pushes na main. A execução desta
-configuração no GitHub Actions ainda precisa ser confirmada após o push.
+ou `pytest.ini` também disparam o workflow em pushes na main. O deploy e a operação do assistente integrado ao portfólio já foram confirmados
+pelo mantenedor. Essa confirmação não transforma a suíte em testes de integração
+com AWS, OpenAI ou PostgreSQL reais.
 
-As pastas por módulo estão reservadas para os próximos comportamentos.
+Os testes estão organizados por responsabilidade da aplicação.
 Os JSONs em `tests/events/` são fixtures, não testes executáveis por si só.
 
 ## Ingestão
@@ -161,3 +162,15 @@ python -m pytest tests/unit/generation -v
 ```
 
 A validação automática das citações ainda não faz parte desta implementação.
+
+## O que ainda validar em produção
+
+O chat já está funcionando, conforme confirmação do mantenedor. Continuar avaliando
+relevância dos trechos, sustentação das respostas, perguntas sem informação,
+atualização da base e erros. Registrar perguntas e evidências esperadas permite
+comparar resultados ao alterar conteúdo, chunking, Top-K ou instruções.
+
+A suíte simulada não comprova resistência a prompt injection, qualidade factual,
+rollback real nem comportamento sob concorrência. Exclusões S3 e conferência
+automática das citações ainda não estão implementadas. Testes reais de consulta
+podem consumir a API; a invocação real de indexing também grava no banco.

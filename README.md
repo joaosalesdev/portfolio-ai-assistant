@@ -1,26 +1,30 @@
 # Portfolio AI Assistant
 
-Assistente RAG para consultar minha experiência profissional, projetos e decisões
-técnicas por meio de um chat integrado ao portfólio. As respostas deverão utilizar
-documentos públicos selecionados, apresentar fontes e reconhecer quando não houver
-evidência suficiente.
+Assistente RAG integrado ao [portfólio de João Paulo](https://joaosalesdev.github.io/portfolio/pt)
+para consultar experiência profissional, projetos e decisões técnicas com base em
+documentos selecionados, recuperando trechos e gerando respostas com referências.
 
-**Em desenvolvimento.** O fluxo de indexação está implementado: valida eventos
-S3, lê documentos, normaliza o texto, cria chunks, gera embeddings OpenAI e
-persiste os dados no PostgreSQL + pgvector. O mantenedor confirmou a leitura real
-do S3 e apresentou registros com embeddings no banco. A consulta recupera chunks, prepara contexto e gera respostas. A validação
-automática das citações e a integração do chat ainda serão implementadas.
+**Em produção e funcionando**, conforme confirmação do mantenedor em 22/10/2026.
+O chat já está integrado ao portfólio e usa o fluxo completo de consulta:
+pergunta → embedding → busca no pgvector → contexto → resposta OpenAI.
+A indexação parte dos uploads no S3 e persiste documentos, chunks e embeddings.
+Inserções e atualizações sem duplicação, inclusive com aumento ou redução dos
+chunks, já foram validadas pelo mantenedor.
 
-O mantenedor confirmou em 18/10/2026 o indexing completo na AWS, com as
-variáveis de ambiente recebidas de GitHub Actions Secrets via Terraform. Uploads
-e atualizações foram testados: documentos não duplicam e seus chunks são
-substituídos, aumentando ou diminuindo conforme o conteúdo. Foram aprovados 70 testes pytest e sete testes Terraform de app
-com serviços simulados; base contém mais um teste Terraform.
+O serviço em uso ainda utiliza os nomes de ambiente `dev` no GitHub Actions e no
+estado Terraform; não há ambientes separados de desenvolvimento e produção.
+A operação confirmada não encerra a avaliação de qualidade, custos e robustez.
+Validação automática das citações foi adiada, e exclusão de documentos no S3 ainda
+não remove dados do RAG.
+
+Nesta revisão, os 70 testes pytest passaram localmente com serviços simulados.
+O repositório também contém sete testes Terraform de app e um de base. Não foram
+executadas chamadas à API paga, consultas ao banco ou mudanças na AWS nesta revisão.
 
 ## Problema e objetivo
 
 Informações profissionais estão distribuídas entre portfólio, currículo e
-documentação de projetos. O assistente permitirá que visitantes e recrutadores
+documentação de projetos. O assistente permite que visitantes e recrutadores
 encontrem informações específicas sem precisar navegar por todas essas fontes.
 
 Exemplos de perguntas:
@@ -34,13 +38,13 @@ O objetivo é construir e operar uma aplicação pequena, avaliar a qualidade da
 recuperação e evoluir a partir de resultados medidos. O sistema não deverá inventar
 experiência profissional nem executar ações externas em nome do visitante.
 
-## Arquitetura alvo
+## Arquitetura
 
 ![Arquitetura alvo do Portfolio AI Assistant: indexação de documentos via S3 e Lambda, consulta pelo portfólio e PostgreSQL com pgvector](docs/diagrams/01-high-level-architecture.png)
 
 [Abrir o diagrama em tamanho original](docs/diagrams/01-high-level-architecture.png).
 
-O diagrama representa os dois fluxos principais planejados. As chamadas às APIs de
+O diagrama representa os dois fluxos principais implementados. As chamadas às APIs de
 embeddings e geração, a Function URL, o ECR e os componentes de operação estão
 descritos abaixo, mas não aparecem individualmente nesta visão de alto nível.
 
@@ -59,7 +63,8 @@ dos chunks por documento após a geração dos novos embeddings. O sequencer S3
 é usado na persistência para ignorar eventos repetidos ou mais antigos.
 
 O bucket é privado. Somente conteúdo autorizado para respostas públicas
-deverá entrar na base. O mecanismo de aprovação ainda será implementado.
+deverá entrar na base. O mecanismo automático de aprovação ainda será implementado; a revisão e a
+seleção dos arquivos enviados ao S3 são manuais.
 
 ### Consulta
 
@@ -69,11 +74,12 @@ Visitante → chat do portfólio → HTTPS / Lambda Function URL
 → seleção de contexto → API de LLM → resposta com fontes
 ```
 
-A Lambda de consulta coordenará retrieval e geração. Documentos e perguntas
-deverão usar a mesma configuração de embeddings. Sem evidência suficiente, o
-assistente deverá informar a limitação; falhas técnicas terão tratamento próprio.
+A Lambda de consulta coordena retrieval e geração. Documentos e perguntas usam
+a mesma configuração de embeddings. As instruções orientam o modelo a reconhecer
+falta de evidência; sem contexto, há uma mensagem fixa de abstenção. Isso não
+garante correção factual. Falhas técnicas retornam códigos de erro próprios.
 
-A busca inicial planejada é exata, por distância de cosseno. Chunking, Top-K e
+A busca atual é exata, por distância de cosseno. Chunking, Top-K e
 eventuais thresholds serão avaliados com perguntas e evidências conhecidas.
 Similaridade não será interpretada como garantia de verdade.
 
@@ -97,14 +103,14 @@ Embeddings utilizam OpenAI `text-embedding-3-small`. A geração usa OpenAI `gpt
 | Lambdas | Indexing validado na AWS até a persistência; retrieval valida, normaliza, gera embeddings e busca chunks; imagens Docker por digest e arquitetura x86_64 |
 | IAM | Roles separadas para Lambda com permissões de escrita nos grupos CloudWatch |
 | CloudWatch | Dois grupos de logs com retenção de 30 dias |
-| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval valida, normaliza, gera embeddings e busca chunks; o chat RAG ainda não está implementado |
+| Handlers | Indexing valida eventos S3, prepara documentos, gera embeddings e persiste; retrieval valida, normaliza, gera embeddings e busca chunks; chat integrado ao portfólio e funcionando, conforme o mantenedor |
 | Entrada S3 | Validação e extração de bucket, chave decodificada, versão e sequencer implementadas; leitura de .md e .txt em UTF-8 implementada |
-| Dockerfiles | Imagens Python 3.14; indexing completo validado na AWS e retrieval com handler mínimo |
+| Dockerfiles | Imagens Python 3.14; indexing completo validado na AWS e retrieval com busca, contexto e geração |
 | ECR | Dois repositórios definidos em base; criação na AWS confirmada |
 | GitHub/AWS | Integração OIDC e permissões para publicação e deploy implementadas; deploy na AWS confirmado pelo mantenedor |
 | GitHub Actions | Workflow de build, teste dos containers, publicação, plan e apply implementado; deploy funcionando na AWS; configuração de required reviewers não documentada como validada |
 | S3 de documentos e notificação | Fluxo upload → Lambda → leitura → embeddings → banco confirmado pelo mantenedor |
-| Function URL | Retrieval público definido com CORS para https://joaosalesdev.github.io; apply e validação HTTP pendentes |
+| Function URL | Retrieval público definido com CORS para https://joaosalesdev.github.io; endpoint publicado e chat integrado, conforme o mantenedor |
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
 | Retrieval e geração | Entrada HTTP, normalização, embedding, busca vetorial e seleção de contexto e geração implementados; validação das citações pendente |
@@ -257,8 +263,8 @@ antigos ainda não têm validação específica registrada.
 ### Variáveis de ambiente
 
 A aplicação precisa apenas de `OPENAI_API_KEY` e `DATABASE_URL`. Ambas são
-configuradas pelo Terraform nas Lambdas; o retrieval atual ainda é um handler
-de consulta já utiliza ambas para embeddings e busca vetorial.
+configuradas pelo Terraform nas Lambdas. Retrieval utiliza ambas para embeddings,
+busca vetorial e geração.
 
 `DOCUMENTS_BUCKET` não é necessário: bucket e chave vêm do evento S3.
 `INDEXING_FUNCTION_NAME` e `RETRIEVAL_FUNCTION_NAME` não são consumidos pelo código.
@@ -282,11 +288,12 @@ aceita POST com body JSON contendo `question`, incluindo body codificado em base
 A pergunta deve ser uma string não vazia de até 2.000 caracteres, após remover
 espaços nas extremidades. O corpo decodificado é limitado a 16 KiB.
 
-O handler retorna JSON com HTTP 200 após gerar o embedding da pergunta, 400 para
+O handler retorna JSON com HTTP 200 após processar a consulta, 400 para
 conteúdo inválido, 405 para método não suportado, 413 para corpo muito grande e
-502 para falha na geração do embedding e 503 para falha de consulta ao banco. A resposta contém a pergunta normalizada,
+502 para falha no embedding ou na geração e 503 para falha na consulta ao banco. A resposta contém a pergunta normalizada,
 o modelo, a dimensão, os chunks recuperados e o contexto com fontes, sem expor o vetor. A resposta gerada é retornada no campo `answer`.
-A Function URL e o CORS estão definidos no Terraform; a criação na AWS ocorre no apply.
+A Function URL e o CORS estão configurados na AWS e são utilizados pelo chat,
+conforme confirmação do mantenedor.
 
 Após a validação, `retrieval/query_preprocessor.py` normaliza a pergunta: espaços
 repetidos, tabs e quebras de linha tornam-se um único espaço, sem espaços nas
@@ -301,8 +308,9 @@ são rejeitadas antes de criar o cliente. O vetor permanece em memória e é usa
 
 A invocação local agora exige `OPENAI_API_KEY` e faz uma chamada paga à OpenAI.
 Também requer `DATABASE_URL` e consulta o banco em modo somente de leitura.
-A busca real e o deploy dessa etapa ainda precisam ser validados; os testes usam
-clientes simulados.
+A busca e a geração reais já funcionam pelo chat, conforme o mantenedor.
+Os testes automatizados usam clientes simulados; a qualidade dos resultados
+precisa continuar sendo avaliada com perguntas e evidências conhecidas.
 
 Para executar localmente o evento POST de exemplo:
 
@@ -348,7 +356,8 @@ contagens e tamanho do contexto, sem imprimir o conteúdo.
 O orçamento é de caracteres, não tokens. `has_context` indica somente que há
 texto selecionado; não garante evidência suficiente para responder. Os documentos
 continuam sendo dados não confiáveis: os identificadores não impedem prompt
-injection. A geração deverá separar instruções de conteúdo e validar as fontes.
+injection. A geração separa instruções de conteúdo; a validação automática dos
+identificadores das citações ainda não está implementada.
 O contexto é enviado ao modelo na etapa seguinte de geração.
 
 ### Geração de respostas
@@ -370,8 +379,8 @@ fontes selecionadas, que podem não coincidir com as efetivamente citadas.
 
 A execução de `python scripts/invoke_retrieval.py` agora gera consumo da OpenAI
 para embedding e, quando há contexto, geração. Continua usando `OPENAI_API_KEY`
-e `DATABASE_URL`; nenhuma dependência adicional é necessária. A geração real não
-foi executada pelo agente. O timeout total da Lambda permanece em 120 segundos,
+e `DATABASE_URL`; nenhuma dependência adicional é necessária. A geração real foi confirmada pelo mantenedor no chat; nesta revisão, o agente
+executou somente testes simulados. O timeout total da Lambda permanece em 120 segundos,
 sem um controle global de duração entre as etapas.
 
 Referências: [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)
@@ -457,6 +466,17 @@ A URL pública pode ser chamada por outros clientes e gerar consumo de API.
 Não há rate limiting nesta alteração. Veja os comandos de teste no
 [guia de deploy](docs/deployment.md).
 
+### Base de conhecimento
+
+`knowledge_base/` organiza os documentos usados para alimentar o RAG. A pasta local
+não é sincronizada automaticamente com o S3. Revisar e enviar somente os documentos
+aprovados ao prefixo `documents/` do bucket configurado.
+
+`knowledge_base/README.md` e `knowledge_base/SOURCES.md` são guias de manutenção,
+não conteúdo factual a indexar. O loader atual não interpreta nem filtra frontmatter
+como `ingest: false` ou `status: draft`: qualquer `.md` ou `.txt` enviado ao prefixo
+monitorado pode ser processado. A seleção deve ocorrer antes do upload.
+
 ### Retenção de imagens no ECR
 
 O `base` configura uma política de lifecycle em cada repositório (`indexing` e
@@ -522,16 +542,14 @@ configuração de required reviewers no GitHub; a declaração do environment no
 YAML, sozinha, não exige aprovação.
 
 Veja [como preparar e executar o deploy](docs/deployment.md).
-O deploy inicial foi confirmado em 12/10/2026. Em 18/10/2026, o mantenedor
-confirmou o indexing completo na AWS, incluindo secrets, novos documentos e
-atualizações dos chunks sem duplicação. Rollback operacional e verificação
-automatizada após deploy continuam pendentes. Retrieval e geração estão
-implementados no código; a geração real e o deploy dessa etapa ainda precisam
-de validação. A integração do chat ainda será implementada.
+O deploy inicial foi confirmado em 12/10/2026 e o indexing completo em
+18/10/2026. Em 22/10/2026, o mantenedor confirmou o assistente em produção,
+com endpoint e chat do portfólio funcionando. Rollback operacional e verificação
+automatizada após deploy continuam como melhorias pendentes.
 
 ## Segurança e operação
 
-Antes de disponibilizar o chat publicamente, implementar:
+Com o chat em produção, continuar revisando e evoluindo:
 
 - Seleção explícita de fontes, sem credenciais ou dados confidenciais.
 - Secrets externos ao código, às imagens e ao contexto do modelo.
@@ -546,19 +564,25 @@ restritivos e citações não eliminam alucinações ou prompt injection.
 As exclusões do Git e do contexto Docker não substituem a revisão dos arquivos
 antes de publicá-los.
 
-## Avaliação e próximos passos
+## Melhorias e validação contínua
 
-1. Selecionar perguntas com evidências esperadas nos documentos indexados.
-2. Validar busca e contexto com perguntas e evidências esperadas, incluindo exemplos sem resposta.
-3. Validar a geração real e implementar a conferência automática das citações.
-4. Aplicar a Function URL/CORS e integrar o chat ao portfólio; validação automática de citações adiada pelo mantenedor.
-5. Complementar a validação de reentrega, evento antigo, concorrência e rollback no banco real.
-6. Definir exclusão de documentos, verificação após deploy e rollback operacional.
-7. Medir qualidade, latência, erros, tokens e custos antes de otimizar.
+1. Ampliar e revisar o conteúdo aprovado, registrando fontes e informações ausentes.
+2. Manter perguntas com evidências esperadas, paráfrases e casos sem resposta;
+   avaliar a recuperação separadamente da qualidade da resposta gerada.
+3. Medir erros, latência, tokens e custos; definir proteção contra abuso e limites
+   de consumo. CORS não limita chamadas diretas ao endpoint público.
+4. Implementar tratamento de exclusões S3, considerando versionamento, delete
+   markers e eventos fora de ordem, para remover documentos e chunks do RAG.
+5. Retomar a validação automática das citações quando oportuno; ela foi adiada
+   pelo mantenedor e não substitui a avaliação de sustentação factual.
+6. Complementar testes reais de reentrega, evento antigo, concorrência e rollback;
+   reduzir chamadas repetidas de embeddings quando um evento já foi processado.
+7. Documentar rollback operacional, verificar o serviço após deploy e revisar a
+   retenção de imagens; considerar ambientes separados conforme a necessidade.
 
-Os diagramas atuais mostram a arquitetura geral e o deployment. Um diagrama mais
-detalhado de sequência pode ser acrescentado quando o fluxo de consulta estiver
-implementado, refletindo seu comportamento real.
+Os diagramas atuais mostram arquitetura e deployment. Detalhes de sequência podem
+ser acrescentados para explicar o comportamento já implementado, quando úteis.
 
-Implementação, testes locais, publicação e operação são registrados como etapas
-distintas. Não há métricas de uso ou incidentes de produção documentados.
+A confirmação de operação pelo mantenedor e os testes locais são evidências
+distintas. Ainda não há métricas consolidadas de uso, qualidade ou incidentes de
+produção documentadas neste repositório.
