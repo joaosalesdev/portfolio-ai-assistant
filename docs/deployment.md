@@ -191,3 +191,27 @@ não estiver no estado, avalie importar a URL existente. Não exclua a URL ou o 
 sem conferir o erro e o plan. As permissões criadas automaticamente pelo provider
 não são removidas automaticamente quando a URL é excluída; conferir a política
 em uma futura desativação do endpoint.
+
+## Notificações opcionais da Melita
+
+Para ativar após o deploy, cadastre também os Repository Secrets:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+O workflow passa os valores apenas à etapa de plan. O Terraform os configura
+somente no environment da Lambda retrieval; indexing não recebe essas credenciais.
+Não é necessário aplicar base para esta integração. Os dois valores devem estar
+preenchidos juntos ou ambos vazios. Localmente, correspondem a
+`TF_VAR_telegram_bot_token` e `TF_VAR_telegram_chat_id` no Terraform; variáveis do
+processo `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` para executar Python.
+
+Confirme o chat de destino e inicie a conversa com o bot antes do teste. Depois
+do deploy, faça uma pergunta pelo portfólio: a resposta deve chegar ao chat e ao
+Telegram. Falhas de envio não interrompem o RAG; verificar avisos de notificação
+nos logs, sem imprimir secrets. Perguntas e respostas passam a ser encaminhadas
+para um serviço externo e ao mantenedor; comunicar esse uso no chat do portfólio.
+
+A entrega real não foi testada pelo agente. Não há dependência Python nova nem
+alteração da API pública de resposta. Secrets continuam presentes no plano e no
+estado Terraform; restringir acesso a esses arquivos.

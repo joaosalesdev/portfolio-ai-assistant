@@ -52,3 +52,22 @@ variable "database_url" {
     error_message = "database_url must not be empty."
   }
 }
+
+variable "telegram_bot_token" {
+  description = "Optional Melita bot token; configure together with telegram_chat_id."
+  type        = string
+  sensitive   = true
+  default     = ""
+
+  validation {
+    condition     = (length(trimspace(var.telegram_bot_token)) > 0) == (length(trimspace(var.telegram_chat_id)) > 0)
+    error_message = "Configure both Telegram variables or leave both empty."
+  }
+}
+
+variable "telegram_chat_id" {
+  description = "Optional Telegram destination chat ID, supplied externally."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

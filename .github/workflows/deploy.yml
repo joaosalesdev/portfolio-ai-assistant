@@ -116,6 +116,8 @@ jobs:
         env:
           TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
+          TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TF_VAR_telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           terraform -chdir=terraform/app init -reconfigure
           terraform -chdir=terraform/app plan -lock-timeout=5m -out=deploy.tfplan

@@ -102,3 +102,23 @@ run "retrieval_public_url_and_cors" {
   }
 
 }
+
+run "telegram_environment_retrieval_only" {
+  command = plan
+  variables {
+    telegram_bot_token = "test-token"
+    telegram_chat_id   = "123"
+  }
+  assert {
+    condition     = aws_lambda_function.retrieval.environment[0].variables["TELEGRAM_BOT_TOKEN"] == "test-token" && aws_lambda_function.retrieval.environment[0].variables["TELEGRAM_CHAT_ID"] == "123" && !contains(keys(aws_lambda_function.indexing.environment[0].variables), "TELEGRAM_BOT_TOKEN")
+    error_message = "Telegram credentials must be configured only on retrieval."
+  }
+}
+
+run "reject_incomplete_telegram_config" {
+  command = plan
+  variables {
+    telegram_bot_token = "test-token"
+  }
+  expect_failures = [var.telegram_bot_token]
+}

@@ -17,8 +17,8 @@ A operação confirmada não encerra a avaliação de qualidade, custos e robust
 Validação automática das citações foi adiada, e exclusão de documentos no S3 ainda
 não remove dados do RAG.
 
-Nesta revisão, os 70 testes pytest passaram localmente com serviços simulados.
-O repositório também contém sete testes Terraform de app e um de base. Não foram
+Nesta revisão, os 77 testes pytest passaram localmente com serviços simulados.
+O repositório também contém nove testes Terraform de app e um de base. Não foram
 executadas chamadas à API paga, consultas ao banco ou mudanças na AWS nesta revisão.
 
 ## Problema e objetivo
@@ -114,7 +114,7 @@ Embeddings utilizam OpenAI `text-embedding-3-small`. A geração usa OpenAI `gpt
 | Embeddings | OpenAI text-embedding-3-small, 1.536 dimensões e lotes de até 32 chunks |
 | Persistência | PostgreSQL + pgvector, transação por documento e comparação de sequencer; inserção e atualização sem duplicação validadas, incluindo aumento/redução dos chunks; rollback e concorrência reais ainda por validar |
 | Retrieval e geração | Entrada HTTP, normalização, embedding, busca vetorial e seleção de contexto e geração implementados; validação das citações pendente |
-| Testes | Oito testes Terraform com AWS simulado para S3, variáveis e Function URL, além do teste de invocação dos containers; 70 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
+| Testes | Dez testes Terraform com AWS simulado para S3, variáveis e Function URL, além do teste de invocação dos containers; 77 casos pytest de parsing, ingestão, normalização, chunking, embeddings e persistência |
 | Scripts de invocação | Indexing e retrieval locais com eventos JSON implementados |
 
 O backend S3 do Terraform armazena **estado da infraestrutura**. Ele é distinto
@@ -262,7 +262,8 @@ antigos ainda não têm validação específica registrada.
 
 ### Variáveis de ambiente
 
-A aplicação precisa apenas de `OPENAI_API_KEY` e `DATABASE_URL`. Ambas são
+O RAG exige `OPENAI_API_KEY` e `DATABASE_URL`. As notificações opcionais da
+Melita utilizam `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`, somente no retrieval. Ambas são
 configuradas pelo Terraform nas Lambdas. Retrieval utiliza ambas para embeddings,
 busca vetorial e geração.
 
@@ -272,7 +273,7 @@ busca vetorial e geração.
 no seu perfil AWS ou no ambiente, se necessário. Não tente sobrescrever a variável
 reservada `AWS_REGION` no bloco environment da Lambda.
 
-O `.env.example` contém somente as duas variáveis da aplicação. Ele é uma
+O `.env.example` contém as variáveis obrigatórias e as duas opcionais do Telegram. Ele é uma
 referência e não carrega automaticamente um `.env`. O Terraform recebe os valores
 por `TF_VAR_openai_api_key` e `TF_VAR_database_url`; o workflow usa GitHub Actions
 Repository Secrets com nomes `OPENAI_API_KEY` e `DATABASE_URL`.
@@ -385,6 +386,39 @@ sem um controle global de duração entre as etapas.
 
 Referências: [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)
 e [geração de texto](https://developers.openai.com/api/docs/guides/text).
+
+### Notificações para Melita no Telegram
+
+Após uma consulta bem-sucedida, retrieval envia a pergunta normalizada e a resposta
+para o chat configurado no bot Melita. Isso inclui respostas de falta de contexto;
+erros HTTP de entrada, embedding, consulta ou geração não geram notificação.
+Não são enviados vetores, documentos completos, IPs ou credenciais.
+
+Configure `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID` no processo local ou como
+Repository Secrets do GitHub Actions. O Terraform recebe os valores via
+`TF_VAR_telegram_bot_token` e `TF_VAR_telegram_chat_id` e os adiciona apenas à Lambda
+retrieval. O par é opcional: deixar ambos vazios desativa o envio; preencher somente
+um é rejeitado pelo Terraform. O arquivo `.env` não é carregado automaticamente.
+
+`notifications/telegram.py` usa a biblioteca padrão do Python, sem dependências
+novas. Envia texto simples, sem interpretar Markdown/HTML e sem prévias de links.
+Mensagens longas são divididas em partes conservadoras de até 3.500 unidades UTF-16.
+Cada envio tem timeout de dois segundos e não é repetido automaticamente. A chamada
+ocorre antes do retorno HTTP, podendo acrescentar latência. Com menos de dez
+segundos restantes na Lambda, a notificação é ignorada.
+
+O envio é de melhor esforço: configuração ausente, rejeição ou falha no Telegram
+não altera a resposta do chat. Pode haver perda ou entrega parcial; não há fila,
+retry ou garantia de entrega única. Os logs não incluem token, texto da conversa
+ou URL do bot. Os secrets também permanecem no estado/plano Terraform, como os
+outros valores sensíveis.
+
+Antes do teste real, abra a conversa com Melita e envie `/start`; confirme que o
+chat ID identifica a conversa desejada e que o bot tem permissão para enviar nela.
+Ao executar `scripts/invoke_retrieval.py` com as variáveis presentes, o envio real
+também acontece. Os testes automatizados não enviam mensagens. O frontend não
+recebe nem deve enviar o token ou chat ID. Informe no portfólio que perguntas e
+respostas são encaminhadas ao mantenedor pelo Telegram para acompanhamento.
 
 ## Desenvolvimento local
 

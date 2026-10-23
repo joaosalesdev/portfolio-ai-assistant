@@ -25,6 +25,13 @@ def openai_client(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def telegram(monkeypatch):
+    notifier = MagicMock(return_value=True)
+    monkeypatch.setattr("interfaces.lambda_handlers.retrieval.notify_telegram", notifier)
+    return notifier
+
+
+@pytest.fixture(autouse=True)
 def database(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://test")
     factory = MagicMock()
@@ -108,7 +115,7 @@ def test_embedding_failure(event, openai_client):
     assert "Private provider details" not in response["body"]
 
 
-def test_search_results(event, database):
+def test_search_results(event, database, telegram):
     factory, retriever = database
     retriever.return_value = [{"source": "documents/career_goals.md", "text": "Backend e Cloud", "distance": 0.2}]
     response = lambda_handler(event, None)
@@ -121,6 +128,7 @@ def test_search_results(event, database):
     assert body["has_context"] is True
     assert body["generation_model"] == "gpt-6-luna"
     assert body["answer"] == "João procura Backend e Cloud [S1]."
+    telegram.assert_called_once_with(body["question"], body["answer"])
     assert body["matches"][0]["source"] == "documents/career_goals.md"
     assert len(retriever.call_args.args[1]) == 1536
 
@@ -140,3 +148,15 @@ def test_generation_failure(event, database, openai_client):
     response = lambda_handler(event, None)
     assert response["statusCode"] == 502
     assert "Private provider details" not in response["body"]
+
+
+def test_telegram_failure_does_not_break_chat(event, telegram):
+    telegram.side_effect = RuntimeError("Notification unavailable")
+    assert lambda_handler(event, None)["statusCode"] == 200
+
+
+def test_low_remaining_time_skips_notification(event, telegram):
+    context = MagicMock()
+    context.get_remaining_time_in_millis.return_value = 1000
+    assert lambda_handler(event, context)["statusCode"] == 200
+    telegram.assert_not_called()

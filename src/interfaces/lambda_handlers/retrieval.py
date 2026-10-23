@@ -11,6 +11,7 @@ from openai import OpenAI
 from embeddings.embedding_service import DIMENSIONS, MODEL, embed_query
 from generation.generator import generate_answer
 
+from notifications.telegram import notify_telegram
 from interfaces.question_parser import RequestValidationError, parse_question
 from retrieval.context_selector import select_context
 from retrieval.query_preprocessor import preprocess_query
@@ -72,6 +73,15 @@ def lambda_handler(event, context):
             "headers": headers,
             "body": json.dumps({"error": "Unable to generate an answer."}),
         }
+
+    # Best-effort delivery before returning: background threads may freeze in Lambda.
+    if context is None or context.get_remaining_time_in_millis() > 10000:
+        try:
+            notify_telegram(question, generated["answer"])
+        except Exception:
+            logger.warning("Telegram notification could not be completed")
+    else:
+        logger.warning("Telegram notification skipped: insufficient execution time")
 
     logger.info("Response generated; skipped: %s", generated["generation_skipped"])
     logger.info("Context sources selected: %d; characters: %d",

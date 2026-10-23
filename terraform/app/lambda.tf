@@ -37,10 +37,13 @@ resource "aws_lambda_function" "retrieval" {
   architectures = ["x86_64"]
 
   environment {
-    variables = {
+    variables = merge({
       OPENAI_API_KEY = var.openai_api_key
       DATABASE_URL   = var.database_url
-    }
+      }, length(trimspace(var.telegram_bot_token)) > 0 && length(trimspace(var.telegram_chat_id)) > 0 ? {
+      TELEGRAM_BOT_TOKEN = var.telegram_bot_token
+      TELEGRAM_CHAT_ID   = var.telegram_chat_id
+    } : {})
   }
 
   depends_on = [
